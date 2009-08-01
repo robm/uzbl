@@ -469,6 +469,12 @@ void
 retrieve_geometry();
 
 void
+export_var_hash(gpointer k, gpointer v, gpointer ud);
+
+void
+export_vars_to_env();
+
+void
 update_gui(WebKitWebView *page, GArray *argv, GString *result);
 
 gboolean

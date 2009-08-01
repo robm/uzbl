@@ -840,7 +840,8 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "keycmd_bs",          {keycmd_bs, 0}                 },
     { "chain",              {chain, 0}                     },
     { "print",              {print, TRUE}                  },
-    { "update_gui",         {update_gui, TRUE}           }
+    { "update_gui",         {update_gui, TRUE}             },
+    { "export_to_env",      {export_vars_to_env, TRUE}     }
 };
 
 void
@@ -2796,6 +2797,31 @@ void
 dump_config() {
     g_hash_table_foreach(uzbl.comm.proto_var, dump_var_hash, NULL);
     g_hash_table_foreach(uzbl.bindings, dump_key_hash, NULL);
+}
+
+void
+export_var_hash(gpointer k, gpointer v, gpointer ud) {
+    (void) ud;
+    uzbl_cmdprop *c = v;
+    gchar *converted;
+
+    if(c->type == TYPE_STR)
+        setenv((char *)k, *c->ptr.s ? *c->ptr.s : " ", 1);
+    else if(c->type == TYPE_INT) {
+        converted = g_strdup_printf("%d", *c->ptr.i);
+        setenv((char *)k, converted, 1);
+        g_free(converted);
+    }
+    else if(c->type == TYPE_FLOAT) {
+        converted = g_strdup_printf("%f", *c->ptr.f);
+        setenv((char *)k, converted, 1);
+        g_free(converted);
+    }
+}
+
+void
+export_vars_to_env() {
+    g_hash_table_foreach(uzbl.comm.proto_var, export_var_hash, NULL);
 }
 
 void
