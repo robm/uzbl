@@ -62,6 +62,7 @@
 #include "config.h"
 
 UzblCore uzbl;
+GMainLoop *loop;
 
 /* commandline arguments (set initial values for the state variables) */
 const
@@ -107,6 +108,22 @@ typedef struct {
 #define PTR_C_INT(var,    fun) { .ptr.i = (int*)&(var), .type = TYPE_INT, .dump = 0, .writeable = 0, .func = fun }
 #define PTR_C_FLOAT(var,  fun) { .ptr.f = &(var), .type = TYPE_FLOAT, .dump = 0, .writeable = 0, .func = fun }
 
+void
+remove_sync_loop() {
+    printf("UNREF LOOP\n");
+    g_main_loop_unref(loop);
+    //loop = NULL;
+}
+
+void
+quit_loop() {
+    if(g_main_loop_is_running(loop)) {
+        printf("QUIT LOOP\n");
+        g_main_loop_quit(loop);
+        remove_sync_loop();
+    }
+}
+
 const struct var_name_to_ptr_t {
     const char *name;
     uzbl_cmdprop cp;
@@ -142,6 +159,7 @@ const struct var_name_to_ptr_t {
     { "max_conns",              PTR_V_INT(uzbl.net.max_conns,                   1,   cmd_max_conns)},
     { "max_conns_host",         PTR_V_INT(uzbl.net.max_conns_host,              1,   cmd_max_conns_host)},
     { "useragent",              PTR_V_STR(uzbl.net.useragent,                   1,   cmd_useragent)},
+    { "er",                     PTR_V_STR(uzbl.state.event_response,            0,   quit_loop)},
     /* requires webkit >=1.1.14 */
     //{ "view_source",            PTR_V_INT(uzbl.behave.view_source,              0,   cmd_view_source)},
 
@@ -175,7 +193,6 @@ const struct var_name_to_ptr_t {
     { "WEBKIT_MICRO",           PTR_C_INT(uzbl.info.webkit_micro,                    NULL)},
     { "ARCH_UZBL",              PTR_C_STR(uzbl.info.arch,                            NULL)},
     { "COMMIT",                 PTR_C_STR(uzbl.info.commit,                          NULL)},
-    { "LOAD_PROGRESS",          PTR_C_INT(uzbl.gui.sbar.load_progress,               NULL)},
     { "TITLE",                  PTR_C_STR(uzbl.gui.main_title,                       NULL)},
     { "SELECTED_URI",           PTR_C_STR(uzbl.state.selected_url,                   NULL)},
     { "NAME",                   PTR_C_STR(uzbl.state.instance_name,                  NULL)},
@@ -210,8 +227,7 @@ const char *event_table[LAST_EVENT] = {
      "SOCKET_SET"       ,
      "INSTANCE_START"   ,
      "INSTANCE_EXIT"    ,
-     "LOAD_PROGRESS"    ,
-     "LINK_UNHOVER"
+     "LOAD_PROGRESS"
 };
 
 
@@ -406,7 +422,7 @@ send_event_socket(GString *msg) {
     gsize len;
     guint i=0;
 
-    if(uzbl.comm.socket_path &&
+    if(uzbl.comm.socket_path && 
             uzbl.comm.clientchan  &&
             uzbl.comm.clientchan->is_writeable) {
 
@@ -415,7 +431,7 @@ send_event_socket(GString *msg) {
 
             while(i < uzbl.state.event_buffer->len) {
                 tmp = g_ptr_array_index(uzbl.state.event_buffer, i++);
-                ret = g_io_channel_write_chars (uzbl.comm.clientchan,
+                ret = g_io_channel_write_chars (uzbl.comm.clientchan, 
                         tmp->str, tmp->len,
                         &len, &error);
                 /* is g_ptr_array_free(uzbl.state.event_buffer, TRUE) enough? */
@@ -429,7 +445,7 @@ send_event_socket(GString *msg) {
             uzbl.state.event_buffer = NULL;
         }
         if(msg) {
-            ret = g_io_channel_write_chars (uzbl.comm.clientchan,
+            ret = g_io_channel_write_chars (uzbl.comm.clientchan, 
                     msg->str, msg->len,
                     &len, &error);
 
@@ -455,31 +471,23 @@ send_event_stdout(GString *msg) {
     fflush(stdout);
 }
 
-/*
- * build event string and send over the supported interfaces
+/* 
+ * build event string and send over the supported interfaces 
  * custom_event == NULL indicates an internal event
-*/
+*/ 
 void
 send_event(int type, const gchar *details, const gchar *custom_event) {
     GString *event_message = g_string_new("");
-    gchar *buf, *p_val = NULL;
-
-    /* expand shell vars */
-    if(details) {
-        buf = g_strdup(details);
-        p_val = parseenv(g_strdup(buf ? g_strchug(buf) : " "));
-        g_free(buf);
-    }
 
     /* check for custom events */
     if(custom_event) {
         g_string_printf(event_message, "EVENT [%s] %s %s\n",
-                uzbl.state.instance_name, custom_event, p_val);
+                uzbl.state.instance_name, custom_event, details);
     }
     /* check wether we support the internal event */
     else if(type < LAST_EVENT) {
         g_string_printf(event_message, "EVENT [%s] %s %s\n",
-                uzbl.state.instance_name, event_table[type], p_val);
+                uzbl.state.instance_name, event_table[type], details);
     }
 
     if(event_message->str) {
@@ -489,7 +497,6 @@ send_event(int type, const gchar *details, const gchar *custom_event) {
 
         g_string_free(event_message, TRUE);
     }
-    g_free(p_val);
 }
 
 char *
@@ -527,6 +534,7 @@ read_file_by_line (const gchar *path) {
     int i = 0;
 
     chan = g_io_channel_new_file(path, "r", NULL);
+
     if (chan) {
         while (g_io_channel_read_line(chan, &readbuf, &len, NULL, NULL) == G_IO_STATUS_NORMAL) {
             const gchar* val = g_strdup (readbuf);
@@ -542,56 +550,6 @@ read_file_by_line (const gchar *path) {
 
     return lines;
 }
-
-/* search a PATH style string for an existing file+path combination */
-gchar*
-find_existing_file(gchar* path_list) {
-    int i=0;
-    int cnt;
-    gchar **split;
-    gchar *tmp = NULL;
-    gchar *executable;
-
-    if(!path_list)
-        return NULL;
-
-    split = g_strsplit(path_list, ":", 0);
-    while(split[i])
-        i++;
-
-    if(i<=1) {
-        tmp = g_strdup(split[0]);
-        g_strfreev(split);
-        return tmp;
-    }
-    else
-        cnt = i-1;
-
-    i=0;
-    tmp = g_strdup(split[cnt]);
-    g_strstrip(tmp);
-    if(tmp[0] == '/')
-        executable = g_strdup_printf("%s", tmp+1);
-    else
-        executable = g_strdup(tmp);
-    g_free(tmp);
-
-    while(i<cnt) {
-        tmp = g_strconcat(g_strstrip(split[i]), "/", executable, NULL);
-        if(g_file_test(tmp, G_FILE_TEST_EXISTS)) {
-            g_strfreev(split);
-            return tmp;
-        }
-        else
-            g_free(tmp);
-        i++;
-    }
-
-    g_free(executable);
-    g_strfreev(split);
-    return NULL;
-}
-
 
 gchar*
 parseenv (char* string) {
@@ -650,7 +608,7 @@ clean_up(void) {
         unlink (uzbl.comm.socket_path);
 }
 
-/* --- SIGNAL HANDLER --- */
+/* --- SIGNAL HANDLERS --- */
 
 void
 catch_sigterm(int s) {
@@ -886,34 +844,16 @@ link_hover_cb (WebKitWebView* page, const gchar* title, const gchar* link, gpoin
     (void) page;
     (void) title;
     (void) data;
-    State *s = &uzbl.state;
-
-    if(s->selected_url) {
-        if(s->last_selected_url)
-            g_free(s->last_selected_url);
-        s->last_selected_url = g_strdup(s->selected_url);
+    //Set selected_url state variable
+    g_free(uzbl.state.selected_url);
+    uzbl.state.selected_url = NULL;
+    if (link) {
+        uzbl.state.selected_url = g_strdup(link);
+        send_event(LINK_HOVER, uzbl.state.selected_url, NULL);
     }
     else {
-        if(s->last_selected_url) g_free(s->last_selected_url);
-        s->last_selected_url = NULL;
+        send_event(LINK_HOVER, "", NULL);
     }
-
-    g_free(s->selected_url);
-    s->selected_url = NULL;
-
-    if (link) {
-        s->selected_url = g_strdup(link);
-
-        if(s->last_selected_url &&
-           g_strcmp0(s->selected_url, s->last_selected_url))
-            send_event(LINK_UNHOVER, s->last_selected_url, NULL);
-
-        send_event(LINK_HOVER, s->selected_url, NULL);
-    }
-    else if(s->last_selected_url) {
-            send_event(LINK_UNHOVER, s->last_selected_url, NULL);
-    }
-
     update_title();
 }
 
@@ -965,15 +905,66 @@ load_finish_cb (WebKitWebView* page, WebKitWebFrame* frame, gpointer data) {
 }
 
 void
+remove_watches() {
+    g_source_remove(uzbl.comm.stdin_watch_id);
+    //uzbl.comm.stdin_watch_id = 0;
+}
+
+void
+add_watches() {
+    uzbl.comm.stdin_watch_id = g_io_add_watch(uzbl.comm.stdin_chan, G_IO_IN|G_IO_HUP, (GIOFunc) control_stdin, NULL);
+    /*
+       if(uzbl.comm.fifo_path)
+       g_io_add_watch(uzbl.comm.fifo_chan, G_IO_IN|G_IO_HUP, (GIOFunc) control_fifo, NULL);
+       if(uzbl.comm.socket_path)
+       g_io_add_watch(uzbl.comm.clientchan, G_IO_IN|G_IO_HUP, (GIOFunc) control_client_socket, NULL);
+   */
+}
+
+void
 load_start_cb (WebKitWebView* page, WebKitWebFrame* frame, gpointer data) {
     (void) page;
     (void) frame;
     (void) data;
+    gchar *resp = NULL;
+    GString *res = NULL;
+    GIOChannel *chan;
+
     uzbl.gui.sbar.load_progress = 0;
-    if (uzbl.behave.load_start_handler)
-        run_handler(uzbl.behave.load_start_handler, "");
+    //if (uzbl.behave.load_start_handler)
+    //    run_handler(uzbl.behave.load_start_handler, "");
 
     send_event(LOAD_START, uzbl.state.uri, NULL);
+    fflush(stdout);
+
+
+    /* if the loop is already running and the handler is called again
+     * without having recieved an event response kill the loop
+    */
+    if(loop) {
+        quit_loop();
+        //remove_sync_loop();
+    }
+
+    /* remove the main IO watches */
+    remove_watches();
+    /* re-add them so the recursive main loop can
+     * recieve the responses
+    */
+    add_watches();
+
+    /* create a recursive main loop */
+    loop = g_main_loop_new(NULL, FALSE);
+    g_main_loop_run(loop);
+
+    /* re-add the watches to the default main loop */
+    remove_watches();
+    add_watches();
+
+    /* free the event response */
+    g_free(uzbl.state.event_response);
+    uzbl.state.event_response = NULL;
+    loop=NULL;
 }
 
 void
@@ -1060,7 +1051,7 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     /* a request is just semantic sugar to make things more obvious for
      * the user, technically events and requests are the very same thing
     */
-    { "request",               {event, TRUE}                  },
+    { "request",               {event, TRUE}                  }, 
     { "update_gui",            {update_gui, TRUE}             }
 };
 
@@ -1142,11 +1133,8 @@ event(WebKitWebView *page, GArray *argv, GString *result) {
 void
 print(WebKitWebView *page, GArray *argv, GString *result) {
     (void) page; (void) result;
-    gchar* buf;
 
-    buf = expand(argv_idx(argv, 0), 0);
-    g_string_assign(result, buf);
-    g_free(buf);
+    g_string_assign(result, argv_idx(argv, 0));
 }
 
 void
@@ -1280,11 +1268,8 @@ run_js (WebKitWebView * web_view, GArray *argv, GString *result) {
 void
 run_external_js (WebKitWebView * web_view, GArray *argv, GString *result) {
     (void) result;
-    gchar *path = NULL;
-
-    if (argv_idx(argv, 0) &&
-        ((path = find_existing_file(argv_idx(argv, 0)))) ) {
-        GArray* lines = read_file_by_line (path);
+    if (argv_idx(argv, 0)) {
+        GArray* lines = read_file_by_line (argv_idx (argv, 0));
         gchar*  js = NULL;
         int i = 0;
         gchar* line;
@@ -1311,7 +1296,6 @@ run_external_js (WebKitWebView * web_view, GArray *argv, GString *result) {
         eval_js (web_view, js, result);
         g_free (js);
         g_array_free (lines, TRUE);
-        g_free(path);
     }
 }
 
@@ -1506,15 +1490,9 @@ split_quoted(const gchar* src, const gboolean unquote) {
 void
 spawn(WebKitWebView *web_view, GArray *argv, GString *result) {
     (void)web_view; (void)result;
-    gchar *path = NULL;
     //TODO: allow more control over argument order so that users can have some arguments before the default ones from run_command, and some after
-    if ( argv_idx(argv, 0) &&
-            ((path = find_existing_file(argv_idx(argv, 0)))) ) {
-        run_command(path, 0,
-                ((const gchar **) (argv->data + sizeof(gchar*))),
-                FALSE, NULL);
-        g_free(path);
-    }
+    if (argv_idx(argv, 0))
+        run_command(argv_idx(argv, 0), 0, ((const gchar **) (argv->data + sizeof(gchar*))), FALSE, NULL);
 }
 
 void
@@ -1980,6 +1958,7 @@ cmd_view_source() {
 }
 */
 
+
 void
 move_statusbar() {
     if (!uzbl.gui.scrolled_win &&
@@ -2039,6 +2018,7 @@ set_var_value(const gchar *name, gchar *val) {
 
         /* invoke a command specific function */
         if(c->func) c->func();
+        printf("Var: %s Value: %s\n", name, val);
     } else {
         /* check wether name violates our naming scheme */
         if(strpbrk(name, invalid_chars)) {
@@ -2085,7 +2065,7 @@ parse_cmd_line(const char *ctl_line, GString *result) {
     g_free(work_string);
 
     if( strcmp(g_strchug(ctlstrip), "") &&
-        strcmp(exp_line = expand(ctlstrip, 0), "")
+        strcmp(exp_line = expand(ctlstrip, 0), "") 
       ) {
             /* ignore comments */
             if((exp_line[0] == '#'))
@@ -2144,7 +2124,10 @@ control_fifo(GIOChannel *gio, GIOCondition condition) {
     parse_cmd_line(ctl_line, NULL);
     g_free(ctl_line);
 
-    return TRUE;
+    if(loop && uzbl.state.event_response)
+        return FALSE;
+    else
+        return TRUE;
 }
 
 /*@null@*/ gchar*
@@ -2156,16 +2139,17 @@ init_fifo(gchar *dir) { /* return dir or, on error, free dir and return NULL */
         uzbl.comm.fifo_path = NULL;
     }
 
-    GIOChannel *chan = NULL;
+    //GIOChannel *chan = NULL;
     GError *error = NULL;
     gchar *path = build_stream_name(FIFO, dir);
 
     if (!file_exists(path)) {
         if (mkfifo (path, 0666) == 0) {
             // we don't really need to write to the file, but if we open the file as 'r' we will block here, waiting for a writer to open the file.
-            chan = g_io_channel_new_file(path, "r+", &error);
-            if (chan) {
-                if (g_io_add_watch(chan, G_IO_IN|G_IO_HUP, (GIOFunc) control_fifo, NULL)) {
+            //chan = g_io_channel_new_file(path, "r+", &error);
+            uzbl.comm.fifo_chan = g_io_channel_new_file(path, "r+", &error);
+            if (uzbl.comm.fifo_chan) {
+                if (g_io_add_watch(uzbl.comm.fifo_chan, G_IO_IN|G_IO_HUP, (GIOFunc) control_fifo, NULL)) {
                     if (uzbl.state.verbose)
                         printf ("init_fifo: created successfully as %s\n", path);
                         send_event(FIFO_SET, path, NULL);
@@ -2189,14 +2173,28 @@ control_stdin(GIOChannel *gio, GIOCondition condition) {
     gchar *ctl_line = NULL;
     GIOStatus ret;
 
+    printf("CTL STDIN\n");
     ret = g_io_channel_read_line(gio, &ctl_line, NULL, NULL, NULL);
-    if ( (ret == G_IO_STATUS_ERROR) || (ret == G_IO_STATUS_EOF) )
+    if ( (ret == G_IO_STATUS_ERROR) || (ret == G_IO_STATUS_EOF) ) {
+        if(loop) {
+            quit_loop();
+            //remove_sync_loop();
+        }
         return FALSE;
+    }
 
     parse_cmd_line(ctl_line, NULL);
     g_free(ctl_line);
 
-    return TRUE;
+    if(loop && uzbl.state.event_response) {
+        printf("REMOVING WATCH\n");
+        loop = NULL;
+        return FALSE;
+    }
+    else {
+        printf("WATCH ALIVE\n");
+        return TRUE;
+    }
 }
 
 void
@@ -2204,9 +2202,9 @@ create_stdin () {
     GIOChannel *chan = NULL;
     GError *error = NULL;
 
-    chan = g_io_channel_unix_new(fileno(stdin));
-    if (chan) {
-        if (!g_io_add_watch(chan, G_IO_IN|G_IO_HUP, (GIOFunc) control_stdin, NULL)) {
+    uzbl.comm.stdin_chan = g_io_channel_unix_new(fileno(stdin));
+    if (uzbl.comm.stdin_chan) {
+        if (!(uzbl.comm.stdin_watch_id = g_io_add_watch(uzbl.comm.stdin_chan, G_IO_IN|G_IO_HUP, (GIOFunc) control_stdin, NULL))) {
             g_error ("Stdin: could not add watch\n");
         } else {
             if (uzbl.state.verbose)
@@ -2271,7 +2269,11 @@ control_client_socket(GIOChannel *clientchan) {
     if (error) g_error_free (error);
     g_string_free(result, TRUE);
     g_free(ctl_line);
-    return TRUE;
+
+    if(loop && uzbl.state.event_response)
+        return FALSE;
+    else
+        return TRUE;
 }
 
 /*@null@*/ gchar*
@@ -2875,6 +2877,7 @@ void
 initialize(int argc, char *argv[]) {
     if (!g_thread_supported ())
         g_thread_init (NULL);
+
     uzbl.state.executable_path = g_strdup(argv[0]);
     uzbl.state.selected_url = NULL;
     uzbl.state.searchtx = NULL;
@@ -3011,7 +3014,6 @@ main (int argc, char* argv[]) {
     } else if (uzbl.state.uri)
         cmd_load_uri();
 
-    //printf("FILE:  %s\n", find_existing_file("/bar:/home/robert:/usr:/tmp:style.css"));
     gtk_main ();
     clean_up();
 
