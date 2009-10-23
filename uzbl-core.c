@@ -1752,15 +1752,69 @@ init_connect_socket() {
                 g_ptr_array_add(uzbl.comm.connect_chan, (gpointer)chan);
                 replay++;
             }
+            if (uzbl.state.verbose)
+                g_print ("connected to \"%s\"\n", *name);
+        } else {
+            if (uzbl.state.verbose)
+                g_print ("failed to connect to \"%s\"\n", *name);
         }
-        else
-            g_warning("Error connecting to socket: %s\n", *name);
         name++;
     }
 
     /* replay buffered events */
     if(replay)
         send_event_socket(NULL);
+}
+
+gboolean
+reconnect_unix (gpointer userdata) {
+    GIOChannel *chan;
+    gint sockfd;
+    struct sockaddr_un local;
+    local = *(struct sockaddr_un*)userdata;
+
+    sockfd = socket (AF_UNIX, SOCK_STREAM, 0);
+
+    if (!connect (sockfd, (struct sockaddr *) &local, sizeof (local))) {
+        if ((chan = g_io_channel_unix_new(sockfd))) {
+            g_io_channel_set_encoding(chan, NULL, NULL);
+            g_io_add_watch(chan, G_IO_IN|G_IO_HUP,
+                    (GIOFunc) control_client_socket, chan);
+            g_ptr_array_add(uzbl.comm.connect_chan, (gpointer)chan);
+        }
+        if (uzbl.state.verbose)
+            g_print ("connected to \"%s\"\n", local.sun_path);
+
+        return FALSE; // done
+    } else {
+        if (uzbl.state.verbose)
+            g_print ("failed to connect to \"%s\"\n", local.sun_path);
+        return TRUE; // retry
+    }
+}
+
+void
+reconnect_channel(GIOChannel *chan) {
+    gint sockfd, socktype;
+    guint optlen;
+    struct sockaddr_un local, *local_p;
+    socklen_t len = sizeof (struct sockaddr_un);
+
+    sockfd = g_io_channel_unix_get_fd (chan);
+    if (getpeername (sockfd, (struct sockaddr *) &local, &len) != 0) {
+        g_warning ("getpeername failed: %d", errno);
+        return;
+    }
+    optlen = sizeof(gint);
+    if (getsockopt (sockfd, SOL_SOCKET, SO_TYPE, &socktype, &optlen) == 0) {
+        local_p = g_new (struct sockaddr_un, 1);
+        *local_p = local;
+
+        g_timeout_add_seconds (5, reconnect_unix, (gpointer) local_p);
+    } else if (errno == ENOTSOCK) {
+        // a file or something, not that likely to be reconnected anyway.
+        g_warning ("channel fd not a socket");
+    }
 }
 
 gboolean
@@ -1775,11 +1829,14 @@ control_client_socket(GIOChannel *clientchan) {
     if (ret == G_IO_STATUS_ERROR) {
         g_warning ("Error reading: %s\n", error->message);
         remove_socket_from_array(clientchan);
+        reconnect_channel (clientchan);
         g_io_channel_shutdown(clientchan, TRUE, &error);
         return FALSE;
     } else if (ret == G_IO_STATUS_EOF) {
         remove_socket_from_array(clientchan);
         /* shutdown and remove channel watch from main loop */
+        g_debug ("Client socket disconnected");
+        reconnect_channel (clientchan);
         g_io_channel_shutdown(clientchan, TRUE, &error);
         return FALSE;
     }
