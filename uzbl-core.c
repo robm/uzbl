@@ -622,7 +622,7 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "chain",                          {chain, 0}                      },
     { "print",                          {print, TRUE}                   },
     { "event",                          {event, TRUE}                   },
-    { "request",                        {event, TRUE}                   },
+    { "request",                        {request, TRUE}                 },
     { "update_gui",                     {update_gui, TRUE}              },
     { "menu_add",                       {menu_add, TRUE}                },
     { "menu_link_add",                  {menu_add_link, TRUE}           },
@@ -636,7 +636,8 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "menu_link_remove",               {menu_remove_link, TRUE}        },
     { "menu_image_remove",              {menu_remove_image, TRUE}       },
     { "menu_editable_remove",           {menu_remove_edit, TRUE}        },
-    { "hardcopy",                       {hardcopy, TRUE}                }
+    { "hardcopy",                       {hardcopy, TRUE}                },
+    { "replay_requests",                {replay_requests, TRUE}         }
 };
 
 void
@@ -862,6 +863,46 @@ event(WebKitWebView *page, GArray *argv, GString *result) {
 
     g_string_free(event_name, TRUE);
     g_strfreev(split);
+}
+
+void
+replay_requests(WebKitWebView *page, GArray *argv, GString *result) {
+    GArray * dummy;
+    GList * it;
+    gchar **ptr;
+    (void) result; (void) argv;
+    dummy = g_array_sized_new (FALSE, FALSE, sizeof (gchar *), 1);
+    for (it = uzbl.state.request_log; it; it = it->next) {
+        ptr = &g_array_index (dummy, gchar *, 0);
+        *ptr = it->data;
+        event (page, dummy, NULL);
+    }
+}
+
+void
+request(WebKitWebView *page, GArray *argv, GString *result) {
+    gchar * req = argv_idx(argv, 0);
+    GList * found = NULL, *it;
+
+    // check all elements except the last for duplicates, if found remove
+    for (it = uzbl.state.request_log; it && it->next; it = it->next) {
+        if (found == NULL && strcmp ((gchar*)it->data, req) == 0) {
+            found = it;
+            uzbl.state.request_log = g_list_remove_link (uzbl.state.request_log, found);
+        }
+    }
+
+    // append the new request unless the last element matches
+    if (it == NULL || strcmp ((gchar*) it->data, req) != 0)
+        it = g_list_append (it, (gpointer) found?found->data:g_strdup (req));
+	
+	if (uzbl.state.request_log == NULL)
+		uzbl.state.request_log = it;
+
+    if (found)
+        g_list_free_1 (found);
+
+    event (page, argv, result);
 }
 
 void
@@ -1752,15 +1793,70 @@ init_connect_socket() {
                 g_ptr_array_add(uzbl.comm.connect_chan, (gpointer)chan);
                 replay++;
             }
+            if (uzbl.state.verbose)
+                g_print ("connected to \"%s\"\n", *name);
+        } else {
+            if (uzbl.state.verbose)
+                g_print ("failed to connect to \"%s\"\n", *name);
         }
-        else
-            g_warning("Error connecting to socket: %s\n", *name);
         name++;
     }
 
     /* replay buffered events */
     if(replay)
         send_event_socket(NULL);
+}
+
+gboolean
+reconnect_unix (gpointer userdata) {
+    GIOChannel *chan;
+    gint sockfd;
+    struct sockaddr_un local;
+    local = *(struct sockaddr_un*)userdata;
+
+    sockfd = socket (AF_UNIX, SOCK_STREAM, 0);
+
+    if (!connect (sockfd, (struct sockaddr *) &local, sizeof (local))) {
+        if ((chan = g_io_channel_unix_new(sockfd))) {
+            g_io_channel_set_encoding(chan, NULL, NULL);
+            g_io_add_watch(chan, G_IO_IN|G_IO_HUP,
+                    (GIOFunc) control_client_socket, chan);
+            g_ptr_array_add(uzbl.comm.connect_chan, (gpointer)chan);
+        }
+        if (uzbl.state.verbose)
+            g_print ("connected to \"%s\"\n", local.sun_path);
+		replay_requests (NULL, NULL, NULL);
+
+        return FALSE; // done
+    } else {
+        if (uzbl.state.verbose)
+            g_print ("failed to connect to \"%s\"\n", local.sun_path);
+        return TRUE; // retry
+    }
+}
+
+void
+reconnect_channel(GIOChannel *chan) {
+    gint sockfd, socktype;
+    guint optlen;
+    struct sockaddr_un local, *local_p;
+    socklen_t len = sizeof (struct sockaddr_un);
+
+    sockfd = g_io_channel_unix_get_fd (chan);
+    if (getpeername (sockfd, (struct sockaddr *) &local, &len) != 0) {
+        g_warning ("getpeername failed: %d", errno);
+        return;
+    }
+    optlen = sizeof(gint);
+    if (getsockopt (sockfd, SOL_SOCKET, SO_TYPE, &socktype, &optlen) == 0) {
+        local_p = g_new (struct sockaddr_un, 1);
+        *local_p = local;
+
+        g_timeout_add_seconds (5, reconnect_unix, (gpointer) local_p);
+    } else if (errno == ENOTSOCK) {
+        // a file or something, not that likely to be reconnected anyway.
+        g_warning ("channel fd not a socket");
+    }
 }
 
 gboolean
@@ -1775,11 +1871,14 @@ control_client_socket(GIOChannel *clientchan) {
     if (ret == G_IO_STATUS_ERROR) {
         g_warning ("Error reading: %s\n", error->message);
         remove_socket_from_array(clientchan);
+        reconnect_channel (clientchan);
         g_io_channel_shutdown(clientchan, TRUE, &error);
         return FALSE;
     } else if (ret == G_IO_STATUS_EOF) {
         remove_socket_from_array(clientchan);
         /* shutdown and remove channel watch from main loop */
+        g_debug ("Client socket disconnected");
+        reconnect_channel (clientchan);
         g_io_channel_shutdown(clientchan, TRUE, &error);
         return FALSE;
     }
@@ -2303,6 +2402,8 @@ initialize(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     event_buffer_timeout(10);
+
+    uzbl.state.request_log = NULL;
 
     uzbl.info.webkit_major = WEBKIT_MAJOR_VERSION;
     uzbl.info.webkit_minor = WEBKIT_MINOR_VERSION;
