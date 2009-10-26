@@ -622,7 +622,7 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "chain",                          {chain, 0}                      },
     { "print",                          {print, TRUE}                   },
     { "event",                          {event, TRUE}                   },
-    { "request",                        {event, TRUE}                   },
+    { "request",                        {request, TRUE}                 },
     { "update_gui",                     {update_gui, TRUE}              },
     { "menu_add",                       {menu_add, TRUE}                },
     { "menu_link_add",                  {menu_add_link, TRUE}           },
@@ -636,7 +636,8 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "menu_link_remove",               {menu_remove_link, TRUE}        },
     { "menu_image_remove",              {menu_remove_image, TRUE}       },
     { "menu_editable_remove",           {menu_remove_edit, TRUE}        },
-    { "hardcopy",                       {hardcopy, TRUE}                }
+    { "hardcopy",                       {hardcopy, TRUE}                },
+    { "replay_requests",                {replay_requests, TRUE}         }
 };
 
 void
@@ -862,6 +863,46 @@ event(WebKitWebView *page, GArray *argv, GString *result) {
 
     g_string_free(event_name, TRUE);
     g_strfreev(split);
+}
+
+void
+replay_requests(WebKitWebView *page, GArray *argv, GString *result) {
+    GArray * dummy;
+    GList * it;
+    gchar **ptr;
+    (void) result; (void) argv;
+    dummy = g_array_sized_new (FALSE, FALSE, sizeof (gchar *), 1);
+    for (it = uzbl.state.request_log; it; it = it->next) {
+        ptr = &g_array_index (dummy, gchar *, 0);
+        *ptr = it->data;
+        event (page, dummy, NULL);
+    }
+}
+
+void
+request(WebKitWebView *page, GArray *argv, GString *result) {
+    gchar * req = argv_idx(argv, 0);
+    GList * found = NULL, *it;
+
+    // check all elements except the last for duplicates, if found remove
+    for (it = uzbl.state.request_log; it && it->next; it = it->next) {
+        if (found == NULL && strcmp ((gchar*)it->data, req) == 0) {
+            found = it;
+            uzbl.state.request_log = g_list_remove_link (uzbl.state.request_log, found);
+        }
+    }
+
+    // append the new request unless the last element matches
+    if (it == NULL || strcmp ((gchar*) it->data, req) != 0)
+        it = g_list_append (it, (gpointer) found?found->data:g_strdup (req));
+	
+	if (uzbl.state.request_log == NULL)
+		uzbl.state.request_log = it;
+
+    if (found)
+        g_list_free_1 (found);
+
+    event (page, argv, result);
 }
 
 void
@@ -1784,6 +1825,7 @@ reconnect_unix (gpointer userdata) {
         }
         if (uzbl.state.verbose)
             g_print ("connected to \"%s\"\n", local.sun_path);
+		replay_requests (NULL, NULL, NULL);
 
         return FALSE; // done
     } else {
@@ -2360,6 +2402,8 @@ initialize(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     event_buffer_timeout(10);
+
+    uzbl.state.request_log = NULL;
 
     uzbl.info.webkit_major = WEBKIT_MAJOR_VERSION;
     uzbl.info.webkit_minor = WEBKIT_MINOR_VERSION;

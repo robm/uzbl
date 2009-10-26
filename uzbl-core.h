@@ -103,6 +103,7 @@ typedef struct {
     gchar*   searchtx;
     gboolean verbose;
     GPtrArray *event_buffer;
+    GList *request_log;
     gchar**   connect_socket_names;
     GdkEventButton *last_button;
 } State;
@@ -429,6 +430,9 @@ void
 update_gui(WebKitWebView *page, GArray *argv, GString *result);
 
 void
+request(WebKitWebView *page, GArray *argv, GString *result);
+
+void
 event(WebKitWebView *page, GArray *argv, GString *result);
 
 void
@@ -475,6 +479,9 @@ menu_remove_edit(WebKitWebView *page, GArray *argv, GString *result);
 
 gint
 get_click_context();
+
+void
+replay_requests(WebKitWebView *page, GArray *argv, GString *result);
 
 void
 hardcopy(WebKitWebView *page, GArray *argv, GString *result);
