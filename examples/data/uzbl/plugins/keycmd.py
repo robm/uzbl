@@ -226,7 +226,7 @@ def key_press(uzbl, key):
     5. If in modcmd mode the pressed key is added to the held keys list.
     6. Keycmd is updated and events raised if anything is changed.'''
 
-    if key.startswith('Shift_'):
+    if key.startswith('Shift_') or key == 'Mode_switch':
         return
 
     if len(key) > 1:
