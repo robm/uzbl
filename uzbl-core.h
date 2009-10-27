@@ -427,9 +427,6 @@ void
 retrieve_geometry();
 
 void
-update_gui(WebKitWebView *page, GArray *argv, GString *result);
-
-void
 request(WebKitWebView *page, GArray *argv, GString *result);
 
 void
