@@ -37,6 +37,9 @@
 
 UzblCore uzbl;
 
+gboolean
+reconnect_unix (gpointer userdata);
+
 /* commandline arguments (set initial values for the state variables) */
 const
 GOptionEntry entries[] =
@@ -1764,7 +1767,7 @@ control_socket(GIOChannel *chan) {
 void
 init_connect_socket() {
     int sockfd, replay = 0;
-    struct sockaddr_un local;
+    struct sockaddr_un local, * local_p;
     GIOChannel *chan;
     gchar **name = NULL;
 
@@ -1791,6 +1794,11 @@ init_connect_socket() {
         } else {
             if (uzbl.state.verbose)
                 g_print ("failed to connect to \"%s\"\n", *name);
+
+            /* schedule for reconnection attempt every 5 seconds */
+            local_p = g_new (struct sockaddr_un, 1);
+            *local_p = local;
+            g_timeout_add_seconds (5, reconnect_unix, (gpointer) local_p);
         }
         name++;
     }
