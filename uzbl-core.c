@@ -1878,8 +1878,6 @@ control_client_socket(GIOChannel *clientchan) {
     } else if (ret == G_IO_STATUS_EOF) {
         remove_socket_from_array(clientchan);
         /* shutdown and remove channel watch from main loop */
-        g_debug ("Client socket disconnected");
-        reconnect_channel (clientchan);
         g_io_channel_shutdown(clientchan, TRUE, &error);
         return FALSE;
     }
