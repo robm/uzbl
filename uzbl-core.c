@@ -1938,8 +1938,11 @@ create_window () {
     gtk_window_set_wmclass(GTK_WINDOW(window), "uzbl", "uzbl");
     gtk_widget_set_name (window, "Uzbl browser");
 
+
+    gtk_widget_add_events (window, GDK_PROPERTY_CHANGE_MASK);
     g_signal_connect (G_OBJECT (window), "destroy",         G_CALLBACK (destroy_cb),         NULL);
     g_signal_connect (G_OBJECT (window), "configure-event", G_CALLBACK (configure_event_cb), NULL);
+    g_signal_connect (G_OBJECT (window), "event",           G_CALLBACK (event_cb),           NULL);
 
     return window;
 }
