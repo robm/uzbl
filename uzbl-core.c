@@ -158,12 +158,15 @@ const struct var_name_to_ptr_t {
 /* construct a hash from the var_name_to_ptr array for quick access */
 void
 create_var_to_name_hash() {
+    uzbl_cmdprop * tmp;
     const struct var_name_to_ptr_t *n2v_p = var_name_to_ptr;
     uzbl.comm.proto_var = g_hash_table_new(g_str_hash, g_str_equal);
     while(n2v_p->name) {
+        tmp = g_malloc(sizeof(uzbl_cmdprop));
+        *tmp = n2v_p->cp;
         g_hash_table_insert(uzbl.comm.proto_var,
                 (gpointer) n2v_p->name,
-                (gpointer) &n2v_p->cp);
+                (gpointer) tmp);
         n2v_p++;
     }
 }
@@ -1470,6 +1473,31 @@ move_statusbar() {
     return;
 }
 
+void
+export_var (const gchar * name, uzbl_cmdprop * var) {
+    GdkAtom atom = gdk_atom_intern (name, FALSE);
+    GdkAtom type;
+    gint format, length;
+    guchar *data;
+
+    switch (var->type) {
+    case TYPE_STR:
+        if (*var->ptr.s == NULL)
+            return;
+        type = gdk_atom_intern ("STRING", FALSE);
+        format = 8;
+        data = (guchar*) *var->ptr.s;
+        length = strlen(*var->ptr.s);
+        break;
+    default:
+        return;
+    }
+    
+    gdk_property_change (uzbl.gui.main_window->window, atom, type, format, GDK_PROP_MODE_REPLACE, data, length);
+    /* A event for this change will be received, remember to ignore it */
+    var->xprop_sync++;
+}
+
 gboolean
 set_var_value(const gchar *name, gchar *val) {
     uzbl_cmdprop *c = NULL;
@@ -1529,6 +1557,8 @@ set_var_value(const gchar *name, gchar *val) {
         send_event(VARIABLE_SET, msg->str, NULL);
         g_string_free(msg,TRUE);
     }
+
+    export_var (name, c);
     update_title();
     return TRUE;
 }

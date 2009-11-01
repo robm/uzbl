@@ -429,6 +429,7 @@ event_cb (GtkWidget* widget, GdkEvent* event, gpointer data) {
         guchar *data;
         gchar *name;
         GdkEventProperty * eprop = (GdkEventProperty*) event;
+        uzbl_cmdprop *c = NULL;
 
         string  = gdk_atom_intern ("STRING", TRUE);
         utf8_string = gdk_atom_intern ("UTF8_STRING", TRUE);
@@ -437,8 +438,18 @@ event_cb (GtkWidget* widget, GdkEvent* event, gpointer data) {
         if (GDK_ATOM_TO_POINTER (type) == GDK_ATOM_TO_POINTER (string) ||
             GDK_ATOM_TO_POINTER (type) == GDK_ATOM_TO_POINTER (utf8_string)) {
             name = gdk_atom_name (eprop->atom);
+
             if (strcmp(name, "WM_NAME") != 0 && strcmp(name, "_NET_WM_NAME") != 0 &&
                 strcmp(name, "WM_ICON_NAME") != 0 && strcmp(name, "_NET_WM_ICON_NAME") != 0) {
+
+                /* Make sure the property was not set by uzbl */
+                if( (c = g_hash_table_lookup(uzbl.comm.proto_var, name)) ) {
+                    if (c->xprop_sync > 0) {
+                        c->xprop_sync--;
+                        return FALSE;
+                    }
+                }
+
                 set_var_value (name, (gchar*) data);
             }
         }
