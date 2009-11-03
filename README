@@ -178,6 +178,8 @@ The following commands are recognized:
    - removes the entry "label" from one of the right click context menus
 * hardcopy
    - open print dialog
+* include <file>
+   - read contents of file and interprete commands
 
 
 ### VARIABLES AND CONSTANTS
@@ -526,6 +528,10 @@ Reported events and their specific format:
 - when the document body or any non-editable element is clicked
 
      EVENT [uzbl_instance_name] ROOT_ACTIVE
+
+- when the include commands succesfully loads a file
+
+     EVENT [uzbl_instance_name] FILE_INCLUDED /path/to/file
 
 
 
