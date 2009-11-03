@@ -230,6 +230,7 @@ typedef struct {
     } ptr;
     int dump;
     int writeable;
+    int xprop_sync;
     /*@null@*/ void (*func)(void);
 } uzbl_cmdprop;
 
