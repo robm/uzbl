@@ -267,8 +267,15 @@ cmd_view_source() {
 }
 
 void
+cmd_set_zoom_type () {
+    if(uzbl.behave.zoom_type) 
+        webkit_web_view_set_full_content_zoom (uzbl.gui.web_view, TRUE);
+    else
+        webkit_web_view_set_full_content_zoom (uzbl.gui.web_view, FALSE);
+}
+
+void
 toggle_zoom_type (WebKitWebView* page, GArray *argv, GString *result) {
-    (void)page;
     (void)argv;
     (void)result;
 
@@ -505,7 +512,7 @@ key_release_cb (GtkWidget* window, GdkEventKey* event) {
     if(event->type == GDK_KEY_RELEASE)
         key_to_event(event->keyval, GDK_KEY_RELEASE);
 
-    return TRUE;
+    return uzbl.behave.forward_keys ? FALSE : TRUE;
 }
 
 gboolean
