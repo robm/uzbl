@@ -654,7 +654,8 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "menu_image_remove",              {menu_remove_image, TRUE}       },
     { "menu_editable_remove",           {menu_remove_edit, TRUE}        },
     { "hardcopy",                       {hardcopy, TRUE}                },
-    { "replay_requests",                {replay_requests, TRUE}         }
+    { "replay_requests",                {replay_requests, TRUE}         },
+    { "include",                        {include, TRUE}                 }
 };
 
 void
@@ -934,6 +935,34 @@ hardcopy(WebKitWebView *page, GArray *argv, GString *result) {
 }
 
 void
+include(WebKitWebView *page, GArray *argv, GString *result) {
+    (void) page;
+    (void) result;
+    gchar *pe = NULL, *path = NULL;
+    gchar *line;
+    int i=0;
+
+    if(!argv_idx(argv, 0))
+        return;
+
+    pe = parseenv(argv_idx(argv, 0));
+    if((path = find_existing_file(pe))) {
+        GArray* lines = read_file_by_line(path);
+
+        while ((line = g_array_index(lines, gchar*, i))) {
+            parse_cmd_line (line, NULL);
+            i++;
+            g_free (line);
+        }
+        g_array_free (lines, TRUE);
+
+        send_event(FILE_INCLUDED, path, NULL);
+        g_free(path);
+    }
+    g_free(pe);
+}
+
+void
 act_dump_config() {
     dump_config();
 }
@@ -1137,11 +1166,18 @@ new_window_load_uri (const gchar * uri) {
     g_string_append_printf (to_execute, "%s --uri '%s'", uzbl.state.executable_path, uri);
     int i;
     for (i = 0; entries[i].long_name != NULL; i++) {
-        if ((entries[i].arg == G_OPTION_ARG_STRING) && (strcmp(entries[i].long_name,"uri")!=0) && (strcmp(entries[i].long_name,"name")!=0)) {
+        if ((entries[i].arg == G_OPTION_ARG_STRING) &&
+                !strcmp(entries[i].long_name,"uri") &&
+                !strcmp(entries[i].long_name,"name")) {
             gchar** str = (gchar**)entries[i].arg_data;
-            if (*str!=NULL) {
+            if (*str!=NULL)
                 g_string_append_printf (to_execute, " --%s '%s'", entries[i].long_name, *str);
-            }
+        }
+        else if(entries[i].arg == G_OPTION_ARG_STRING_ARRAY) {
+            int j;
+            gchar **str = *((gchar ***)entries[i].arg_data);
+            for(j=0; str[j]; j++)
+                g_string_append_printf(to_execute, " --%s '%s'", entries[i].long_name, str[j]);
         }
     }
     if (uzbl.state.verbose)
