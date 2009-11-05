@@ -427,7 +427,7 @@ event_cb (GtkWidget* widget, GdkEvent* event, gpointer data) {
         GdkAtom type, string, utf8_string;
         gint length, format;
         guchar *data;
-        gchar *name;
+        gchar *name, *val;
         GdkEventProperty * eprop = (GdkEventProperty*) event;
         uzbl_cmdprop *c = NULL;
 
@@ -450,7 +450,9 @@ event_cb (GtkWidget* widget, GdkEvent* event, gpointer data) {
                     }
                 }
 
-                set_var_value (name, (gchar*) data);
+                val = g_strndup ((gchar*) data, length);
+                set_var_value (name, val);
+                g_free (val);
             }
         }
         g_free (data);
