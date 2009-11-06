@@ -11,7 +11,7 @@ And it is also possible to execute a function on activation:
 
 import sys
 import re
-from event_manager import config, counter, iscallable, isiterable
+from event_manager import config, counter, isiterable
 
 # Export these variables/functions to uzbl.<name>
 __export__ = ['bind', 'del_bind', 'del_bind_by_glob', 'get_binds']
@@ -135,7 +135,7 @@ class Bind(object):
     nextbid = counter().next
 
     def __init__(self, glob, handler, *args, **kargs):
-        self.is_callable = iscallable(handler)
+        self.is_callable = callable(handler)
         self._repr_cache = None
 
         if not glob:
