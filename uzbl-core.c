@@ -931,9 +931,9 @@ request(WebKitWebView *page, GArray *argv, GString *result) {
     // append the new request unless the last element matches
     if (it == NULL || strcmp ((gchar*) it->data, req) != 0)
         it = g_list_append (it, (gpointer) found?found->data:g_strdup (req));
-	
-	if (uzbl.state.request_log == NULL)
-		uzbl.state.request_log = it;
+
+    if (uzbl.state.request_log == NULL)
+        uzbl.state.request_log = it;
 
     if (found)
         g_list_free_1 (found);
@@ -1850,7 +1850,8 @@ control_socket(GIOChannel *chan) {
     if ((iochan = g_io_channel_unix_new(clientsock))) {
         g_io_channel_set_encoding(iochan, NULL, NULL);
         g_io_add_watch(iochan, G_IO_IN|G_IO_HUP,
-                       (GIOFunc) control_client_socket, iochan);
+            (GIOFunc) control_client_socket,
+            GUINT_TO_POINTER (0));
         g_ptr_array_add(uzbl.comm.client_chan, (gpointer)iochan);
     }
     return TRUE;
@@ -1877,7 +1878,8 @@ init_connect_socket() {
             if ((chan = g_io_channel_unix_new(sockfd))) {
                 g_io_channel_set_encoding(chan, NULL, NULL);
                 g_io_add_watch(chan, G_IO_IN|G_IO_HUP,
-                        (GIOFunc) control_client_socket, chan);
+                    (GIOFunc) control_client_socket,
+                    GUINT_TO_POINTER (SOCKET_RECONNECT));
                 g_ptr_array_add(uzbl.comm.connect_chan, (gpointer)chan);
                 replay++;
             }
@@ -1913,12 +1915,13 @@ reconnect_unix (gpointer userdata) {
         if ((chan = g_io_channel_unix_new(sockfd))) {
             g_io_channel_set_encoding(chan, NULL, NULL);
             g_io_add_watch(chan, G_IO_IN|G_IO_HUP,
-                    (GIOFunc) control_client_socket, chan);
+                (GIOFunc) control_client_socket,
+                GUINT_TO_POINTER (SOCKET_RECONNECT));
             g_ptr_array_add(uzbl.comm.connect_chan, (gpointer)chan);
         }
         if (uzbl.state.verbose)
             g_print ("connected to \"%s\"\n", local.sun_path);
-		replay_requests (NULL, NULL, NULL);
+        replay_requests (NULL, NULL, NULL);
 
         return FALSE; // done
     } else {
@@ -1953,22 +1956,29 @@ reconnect_channel(GIOChannel *chan) {
 }
 
 gboolean
-control_client_socket(GIOChannel *clientchan) {
+control_client_socket(GIOChannel *clientchan, GIOCondition cond, gpointer data) {
     char *ctl_line;
     GString *result = g_string_new("");
     GError *error = NULL;
     GIOStatus ret;
     gsize len;
+    guint flags;
+    (void) cond;
+
+    flags = GPOINTER_TO_UINT (data);
 
     ret = g_io_channel_read_line(clientchan, &ctl_line, &len, NULL, &error);
     if (ret == G_IO_STATUS_ERROR) {
         g_warning ("Error reading: %s\n", error->message);
         remove_socket_from_array(clientchan);
-        reconnect_channel (clientchan);
+        if (flags & SOCKET_RECONNECT)
+            reconnect_channel (clientchan);
         g_io_channel_shutdown(clientchan, TRUE, &error);
         return FALSE;
     } else if (ret == G_IO_STATUS_EOF) {
         remove_socket_from_array(clientchan);
+        if (flags & SOCKET_RECONNECT)
+            reconnect_channel (clientchan);
         /* shutdown and remove channel watch from main loop */
         g_io_channel_shutdown(clientchan, TRUE, &error);
         return FALSE;
