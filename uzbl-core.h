@@ -69,6 +69,7 @@ typedef struct {
 
 /* external communication*/
 enum { FIFO, SOCKET};
+enum { SOCKET_RECONNECT = 1 << 0 };
 typedef struct {
     gchar          *fifo_path;
     gchar          *socket_path;
@@ -325,7 +326,7 @@ gboolean
 control_socket(GIOChannel *chan);
 
 gboolean
-control_client_socket(GIOChannel *chan);
+control_client_socket(GIOChannel *chan, GIOCondition, gpointer);
 
 void
 update_title (void);
