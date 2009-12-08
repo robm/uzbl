@@ -14,6 +14,7 @@ enum event_type {
     LINK_UNHOVER, FORM_ACTIVE, ROOT_ACTIVE,
     FOCUS_LOST, FOCUS_GAINED, FILE_INCLUDED,
     PLUG_CREATED, COMMAND_ERROR, BUILTINS,
+    WARNING,
 
     /* must be last entry */
     LAST_EVENT

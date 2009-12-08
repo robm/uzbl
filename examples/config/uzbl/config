@@ -25,6 +25,7 @@ set modkey_addition = request MODKEY_ADDITION
 set set_mode       = set mode =
 set set_status     = set status_message =
 set shell_cmd      = sh -c
+set request_log_cap = 8192
 
 # Spawn path shortcuts. In spawn the first dir+path match is used in "dir1:dir2:dir3:executable"
 set scripts_dir    = $XDG_DATA_HOME/uzbl:@prefix/share/uzbl/examples/data/uzbl:scripts
@@ -63,6 +64,9 @@ set new_window         = sh 'uzbl-browser -u $8' # equivalent to the default beh
 @on_event   FORM_ACTIVE    @set_mode insert
 # Switch to command mode if anything else is clicked
 @on_event   ROOT_ACTIVE    @set_mode command
+
+# Put warnings in status_message
+@on_event   WARNING        set status_message = <span foreground="red">%s</span>
 
 # Misc on_event handlers
 #@on_event  CONFIG_CHANGED print Config changed: %1 = %2
