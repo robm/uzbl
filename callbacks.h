@@ -155,9 +155,6 @@ void
 destroy_cb (GtkWidget* widget, gpointer data);
 
 gboolean
-event_cb (GtkWidget* widget, GdkEvent* event, gpointer data);
-
-gboolean
 configure_event_cb(GtkWidget* window, GdkEventConfigure* event);
 
 gboolean

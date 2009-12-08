@@ -117,15 +117,6 @@ def counter():
         yield i
 
 
-<<<<<<< HEAD
-=======
-def isiterable(obj):
-    '''Return true if you can iterate over the item.'''
-
-    return hasattr(obj, "__iter__")
-
-
->>>>>>> 1f787ca9dee0b193d8d3462cc65919ae128b406c
 def find_plugins(plugin_dirs):
     '''Find all event manager plugins in the plugin dirs and return a
     dictionary of {'plugin-name.py': '/full/path/to/plugin-name.py', ...}'''

@@ -69,7 +69,6 @@ typedef struct {
 
 /* external communication*/
 enum { FIFO, SOCKET};
-enum { SOCKET_RECONNECT = 1 << 0 };
 typedef struct {
     gchar          *fifo_path;
     gchar          *socket_path;
@@ -95,7 +94,6 @@ typedef struct {
     gchar*   searchtx;
     gboolean verbose;
     GPtrArray *event_buffer;
-    GList *request_log;
     gchar**   connect_socket_names;
     GdkEventButton *last_button;
     gboolean plug_mode;
@@ -220,7 +218,6 @@ typedef struct {
     } ptr;
     int dump;
     int writeable;
-    int xprop_sync;
     /*@null@*/ void (*func)(void);
 } uzbl_cmdprop;
 
@@ -326,7 +323,7 @@ gboolean
 control_socket(GIOChannel *chan);
 
 gboolean
-control_client_socket(GIOChannel *chan, GIOCondition, gpointer);
+control_client_socket(GIOChannel *chan);
 
 void
 update_title (void);
@@ -422,9 +419,6 @@ void
 retrieve_geometry();
 
 void
-request(WebKitWebView *page, GArray *argv, GString *result);
-
-void
 event(WebKitWebView *page, GArray *argv, GString *result);
 
 void
@@ -471,9 +465,6 @@ menu_remove_edit(WebKitWebView *page, GArray *argv, GString *result);
 
 gint
 get_click_context();
-
-void
-replay_requests(WebKitWebView *page, GArray *argv, GString *result);
 
 void
 hardcopy(WebKitWebView *page, GArray *argv, GString *result);

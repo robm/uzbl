@@ -37,9 +37,6 @@
 
 UzblCore uzbl;
 
-gboolean
-reconnect_unix (gpointer userdata);
-
 /* commandline arguments (set initial values for the state variables) */
 const
 GOptionEntry entries[] =
@@ -156,15 +153,12 @@ const struct var_name_to_ptr_t {
 /* construct a hash from the var_name_to_ptr array for quick access */
 void
 create_var_to_name_hash() {
-    uzbl_cmdprop * tmp;
     const struct var_name_to_ptr_t *n2v_p = var_name_to_ptr;
     uzbl.comm.proto_var = g_hash_table_new(g_str_hash, g_str_equal);
     while(n2v_p->name) {
-        tmp = g_malloc(sizeof(uzbl_cmdprop));
-        *tmp = n2v_p->cp;
         g_hash_table_insert(uzbl.comm.proto_var,
                 (gpointer) n2v_p->name,
-                (gpointer) tmp);
+                (gpointer) &n2v_p->cp);
         n2v_p++;
     }
 }
@@ -675,7 +669,7 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "chain",                          {chain, 0}                      },
     { "print",                          {print, TRUE}                   },
     { "event",                          {event, TRUE}                   },
-    { "request",                        {request, TRUE}                 },
+    { "request",                        {event, TRUE}                   },
     { "menu_add",                       {menu_add, TRUE}                },
     { "menu_link_add",                  {menu_add_link, TRUE}           },
     { "menu_image_add",                 {menu_add_image, TRUE}          },
@@ -689,7 +683,6 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "menu_image_remove",              {menu_remove_image, TRUE}       },
     { "menu_editable_remove",           {menu_remove_edit, TRUE}        },
     { "hardcopy",                       {hardcopy, TRUE}                },
-    { "replay_requests",                {replay_requests, TRUE}         },
     { "include",                        {include, TRUE}                 }
 };
 
@@ -935,46 +928,6 @@ event(WebKitWebView *page, GArray *argv, GString *result) {
 
     g_string_free(event_name, TRUE);
     g_strfreev(split);
-}
-
-void
-replay_requests(WebKitWebView *page, GArray *argv, GString *result) {
-    GArray * dummy;
-    GList * it;
-    gchar **ptr;
-    (void) result; (void) argv;
-    dummy = g_array_sized_new (FALSE, FALSE, sizeof (gchar *), 1);
-    for (it = uzbl.state.request_log; it; it = it->next) {
-        ptr = &g_array_index (dummy, gchar *, 0);
-        *ptr = it->data;
-        event (page, dummy, NULL);
-    }
-}
-
-void
-request(WebKitWebView *page, GArray *argv, GString *result) {
-    gchar * req = argv_idx(argv, 0);
-    GList * found = NULL, *it;
-
-    // check all elements except the last for duplicates, if found remove
-    for (it = uzbl.state.request_log; it && it->next; it = it->next) {
-        if (found == NULL && strcmp ((gchar*)it->data, req) == 0) {
-            found = it;
-            uzbl.state.request_log = g_list_remove_link (uzbl.state.request_log, found);
-        }
-    }
-
-    // append the new request unless the last element matches
-    if (it == NULL || strcmp ((gchar*) it->data, req) != 0)
-        it = g_list_append (it, (gpointer) found?found->data:g_strdup (req));
-
-    if (uzbl.state.request_log == NULL)
-        uzbl.state.request_log = it;
-
-    if (found)
-        g_list_free_1 (found);
-
-    event (page, argv, result);
 }
 
 void
@@ -1642,31 +1595,6 @@ move_statusbar() {
     return;
 }
 
-void
-export_var (const gchar * name, uzbl_cmdprop * var) {
-    GdkAtom atom = gdk_atom_intern (name, FALSE);
-    GdkAtom type;
-    gint format, length;
-    guchar *data;
-
-    switch (var->type) {
-    case TYPE_STR:
-        if (*var->ptr.s == NULL)
-            return;
-        type = gdk_atom_intern ("STRING", FALSE);
-        format = 8;
-        data = (guchar*) *var->ptr.s;
-        length = strlen(*var->ptr.s);
-        break;
-    default:
-        return;
-    }
-    
-    gdk_property_change (uzbl.gui.main_window->window, atom, type, format, GDK_PROP_MODE_REPLACE, data, length);
-    /* A event for this change will be received, remember to ignore it */
-    var->xprop_sync++;
-}
-
 gboolean
 set_var_value(const gchar *name, gchar *val) {
     uzbl_cmdprop *c = NULL;
@@ -1726,8 +1654,6 @@ set_var_value(const gchar *name, gchar *val) {
         send_event(VARIABLE_SET, msg->str, NULL);
         g_string_free(msg,TRUE);
     }
-
-    export_var (name, c);
     update_title();
     return TRUE;
 }
@@ -1913,8 +1839,7 @@ control_socket(GIOChannel *chan) {
     if ((iochan = g_io_channel_unix_new(clientsock))) {
         g_io_channel_set_encoding(iochan, NULL, NULL);
         g_io_add_watch(iochan, G_IO_IN|G_IO_HUP,
-            (GIOFunc) control_client_socket,
-            GUINT_TO_POINTER (0));
+                       (GIOFunc) control_client_socket, iochan);
         g_ptr_array_add(uzbl.comm.client_chan, (gpointer)iochan);
     }
     return TRUE;
@@ -1923,7 +1848,7 @@ control_socket(GIOChannel *chan) {
 void
 init_connect_socket() {
     int sockfd, replay = 0;
-    struct sockaddr_un local, * local_p;
+    struct sockaddr_un local;
     GIOChannel *chan;
     gchar **name = NULL;
 
@@ -1941,22 +1866,13 @@ init_connect_socket() {
             if ((chan = g_io_channel_unix_new(sockfd))) {
                 g_io_channel_set_encoding(chan, NULL, NULL);
                 g_io_add_watch(chan, G_IO_IN|G_IO_HUP,
-                    (GIOFunc) control_client_socket,
-                    GUINT_TO_POINTER (SOCKET_RECONNECT));
+                        (GIOFunc) control_client_socket, chan);
                 g_ptr_array_add(uzbl.comm.connect_chan, (gpointer)chan);
                 replay++;
             }
-            if (uzbl.state.verbose)
-                g_print ("connected to \"%s\"\n", *name);
-        } else {
-            if (uzbl.state.verbose)
-                g_print ("failed to connect to \"%s\"\n", *name);
-
-            /* schedule for reconnection attempt every 5 seconds */
-            local_p = g_new (struct sockaddr_un, 1);
-            *local_p = local;
-            g_timeout_add_seconds (5, reconnect_unix, (gpointer) local_p);
         }
+        else
+            g_warning("Error connecting to socket: %s\n", *name);
         name++;
     }
 
@@ -1966,82 +1882,21 @@ init_connect_socket() {
 }
 
 gboolean
-reconnect_unix (gpointer userdata) {
-    GIOChannel *chan;
-    gint sockfd;
-    struct sockaddr_un local;
-    local = *(struct sockaddr_un*)userdata;
-
-    sockfd = socket (AF_UNIX, SOCK_STREAM, 0);
-
-    if (!connect (sockfd, (struct sockaddr *) &local, sizeof (local))) {
-        if ((chan = g_io_channel_unix_new(sockfd))) {
-            g_io_channel_set_encoding(chan, NULL, NULL);
-            g_io_add_watch(chan, G_IO_IN|G_IO_HUP,
-                (GIOFunc) control_client_socket,
-                GUINT_TO_POINTER (SOCKET_RECONNECT));
-            g_ptr_array_add(uzbl.comm.connect_chan, (gpointer)chan);
-        }
-        if (uzbl.state.verbose)
-            g_print ("connected to \"%s\"\n", local.sun_path);
-        replay_requests (NULL, NULL, NULL);
-
-        return FALSE; // done
-    } else {
-        if (uzbl.state.verbose)
-            g_print ("failed to connect to \"%s\"\n", local.sun_path);
-        return TRUE; // retry
-    }
-}
-
-void
-reconnect_channel(GIOChannel *chan) {
-    gint sockfd, socktype;
-    guint optlen;
-    struct sockaddr_un local, *local_p;
-    socklen_t len = sizeof (struct sockaddr_un);
-
-    sockfd = g_io_channel_unix_get_fd (chan);
-    if (getpeername (sockfd, (struct sockaddr *) &local, &len) != 0) {
-        g_warning ("getpeername failed: %d", errno);
-        return;
-    }
-    optlen = sizeof(gint);
-    if (getsockopt (sockfd, SOL_SOCKET, SO_TYPE, &socktype, &optlen) == 0) {
-        local_p = g_new (struct sockaddr_un, 1);
-        *local_p = local;
-
-        g_timeout_add_seconds (5, reconnect_unix, (gpointer) local_p);
-    } else if (errno == ENOTSOCK) {
-        // a file or something, not that likely to be reconnected anyway.
-        g_warning ("channel fd not a socket");
-    }
-}
-
-gboolean
-control_client_socket(GIOChannel *clientchan, GIOCondition cond, gpointer data) {
+control_client_socket(GIOChannel *clientchan) {
     char *ctl_line;
     GString *result = g_string_new("");
     GError *error = NULL;
     GIOStatus ret;
     gsize len;
-    guint flags;
-    (void) cond;
-
-    flags = GPOINTER_TO_UINT (data);
 
     ret = g_io_channel_read_line(clientchan, &ctl_line, &len, NULL, &error);
     if (ret == G_IO_STATUS_ERROR) {
         g_warning ("Error reading: %s\n", error->message);
         remove_socket_from_array(clientchan);
-        if (flags & SOCKET_RECONNECT)
-            reconnect_channel (clientchan);
         g_io_channel_shutdown(clientchan, TRUE, &error);
         return FALSE;
     } else if (ret == G_IO_STATUS_EOF) {
         remove_socket_from_array(clientchan);
-        if (flags & SOCKET_RECONNECT)
-            reconnect_channel (clientchan);
         /* shutdown and remove channel watch from main loop */
         g_io_channel_shutdown(clientchan, TRUE, &error);
         return FALSE;
@@ -2208,11 +2063,8 @@ create_window () {
     gtk_window_set_default_size (GTK_WINDOW (window), 800, 600);
     gtk_widget_set_name (window, "Uzbl browser");
 
-
-    gtk_widget_add_events (window, GDK_PROPERTY_CHANGE_MASK);
     g_signal_connect (G_OBJECT (window), "destroy",         G_CALLBACK (destroy_cb),         NULL);
     g_signal_connect (G_OBJECT (window), "configure-event", G_CALLBACK (configure_event_cb), NULL);
-    g_signal_connect (G_OBJECT (window), "event",           G_CALLBACK (event_cb),           NULL);
 
     return window;
 }
@@ -2589,8 +2441,6 @@ initialize(int argc, char *argv[]) {
             fprintf(stderr, "uzbl: error hooking %d: %s\n", sigs[i], strerror(errno));
     }
     event_buffer_timeout(10);
-
-    uzbl.state.request_log = NULL;
 
     uzbl.info.webkit_major = WEBKIT_MAJOR_VERSION;
     uzbl.info.webkit_minor = WEBKIT_MINOR_VERSION;
