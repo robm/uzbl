@@ -270,7 +270,6 @@ expand(const char *s, guint recurse) {
                     if(ret[0] == '+') {
                         mycmd = expand(ret+1, 1);
                         g_spawn_command_line_sync(mycmd, &cmd_stdout, NULL, NULL, &err);
-                        g_free(mycmd);
                     }
                     /* execute program through shell, quote it first */
                     else {
@@ -280,10 +279,11 @@ expand(const char *s, guint recurse) {
                                 uzbl.behave.shell_cmd?uzbl.behave.shell_cmd:"/bin/sh -c",
                                 quoted);
                         g_spawn_command_line_sync(tmp, &cmd_stdout, NULL, NULL, &err);
-                        g_free(mycmd);
                         g_free(quoted);
                         g_free(tmp);
                     }
+                    g_free(mycmd);
+
                     if (err) {
                         g_printerr("error on running command: %s\n", err->message);
                         g_error_free (err);
