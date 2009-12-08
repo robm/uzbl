@@ -95,7 +95,8 @@ typedef struct {
     gchar*   searchtx;
     gboolean verbose;
     GPtrArray *event_buffer;
-    GList *request_log;
+    GList*   request_log;
+    guint    request_log_size;
     gchar**   connect_socket_names;
     GdkEventButton *last_button;
     gboolean plug_mode;
@@ -160,6 +161,7 @@ typedef struct {
     guint    mode;
     gchar*   base_url;
     gboolean print_version;
+    guint    request_log_cap;
 
     /* command list: (key)name -> (value)Command  */
     /* command list: (key)name -> (value)Command  */

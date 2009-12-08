@@ -97,6 +97,7 @@ const struct var_name_to_ptr_t {
     { "status_background",      PTR_V_STR(uzbl.behave.status_background,        1,   NULL)},
     { "title_format_long",      PTR_V_STR(uzbl.behave.title_format_long,        1,   NULL)},
     { "title_format_short",     PTR_V_STR(uzbl.behave.title_format_short,       1,   NULL)},
+    { "request_log_cap",        PTR_V_INT(uzbl.behave.request_log_cap,          1,   NULL)},
     { "icon",                   PTR_V_STR(uzbl.gui.icon,                        1,   set_icon)},
     { "forward_keys",           PTR_V_INT(uzbl.behave.forward_keys,             1,   NULL)},
     { "download_handler",       PTR_V_STR(uzbl.behave.download_handler,         1,   NULL)},
@@ -917,7 +918,9 @@ replay_requests(WebKitWebView *page, GArray *argv, GString *result) {
 
 void
 request(WebKitWebView *page, GArray *argv, GString *result) {
+    int new_data;
     gchar * req = argv_idx(argv, 0);
+    gchar * error_msg;
     GList * found = NULL, *it;
 
     // check all elements except the last for duplicates, if found remove
@@ -929,8 +932,18 @@ request(WebKitWebView *page, GArray *argv, GString *result) {
     }
 
     // append the new request unless the last element matches
-    if (it == NULL || strcmp ((gchar*) it->data, req) != 0)
-        it = g_list_append (it, (gpointer) found?found->data:g_strdup (req));
+    if (it == NULL || strcmp ((gchar*) it->data, req) != 0) {
+        new_data = found ? 0 : strlen (req);
+
+        if (uzbl.behave.request_log_cap < uzbl.state.request_log_size + new_data) {
+            error_msg = g_strdup_printf ("request log full %d", uzbl.state.request_log_size);
+            send_event (WARNING, error_msg, 0);
+            g_free (error_msg);
+        } else {
+            it = g_list_append (it, (gpointer) found?found->data:g_strdup (req));
+            uzbl.state.request_log_size += new_data;
+        }
+    }
 
     if (uzbl.state.request_log == NULL)
         uzbl.state.request_log = it;
@@ -2525,6 +2538,7 @@ initialize(int argc, char *argv[]) {
     event_buffer_timeout(10);
 
     uzbl.state.request_log = NULL;
+    uzbl.state.request_log_size = 0;
 
     uzbl.info.webkit_major = WEBKIT_MAJOR_VERSION;
     uzbl.info.webkit_minor = WEBKIT_MINOR_VERSION;
