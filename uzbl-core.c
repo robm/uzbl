@@ -166,7 +166,31 @@ create_var_to_name_hash() {
 
 
 /* --- UTILITY FUNCTIONS --- */
-enum exp_type {EXP_ERR, EXP_SIMPLE_VAR, EXP_BRACED_VAR, EXP_EXPR, EXP_JS, EXP_ESCAPE};
+
+gchar *
+exp_quote(gchar *unquoted) {
+    GString *quoted = g_string_new("");
+    gchar *buf_start = unquoted;
+
+    if(!unquoted)
+        return NULL;
+
+    while(unquoted && *unquoted) {
+        if(*unquoted == '@' || *unquoted == '\\') {
+            g_string_append_len(quoted, buf_start, unquoted-buf_start);
+            g_string_append_c(quoted, '\\');
+            g_string_append_c(quoted, *unquoted);
+            buf_start=unquoted+1;
+        }
+        unquoted++;
+    }
+    g_string_append(quoted, buf_start);
+
+    return g_string_free(quoted, FALSE);
+}
+
+enum exp_type {EXP_ERR, EXP_SIMPLE_VAR, EXP_BRACED_VAR, 
+               EXP_EXPR, EXP_JS, EXP_ESCAPE, EXP_QUOTE};
 enum exp_type
 get_exp_type(const gchar *s) {
     /* variables */
@@ -178,6 +202,8 @@ get_exp_type(const gchar *s) {
         return EXP_JS;
     else if(*(s+1) == '[')
         return EXP_ESCAPE;
+    else if(*(s+1) == '\'')
+        return EXP_QUOTE;
     else
         return EXP_SIMPLE_VAR;
 
@@ -236,6 +262,11 @@ expand(const char *s, guint recurse) {
                     case EXP_ESCAPE:
                         s++;
                         vend = strstr(s, "]@");
+                        if(!vend) vend = strchr(s, '\0');
+                        break;
+                    case EXP_QUOTE:
+                        s++;
+                        vend = strstr(s, "'@");
                         if(!vend) vend = strchr(s, '\0');
                         break;
                     /*@notreached@*/
@@ -336,10 +367,18 @@ expand(const char *s, guint recurse) {
                     g_free(mycmd);
                     s = vend+2;
                 }
+                else if(etype == EXP_QUOTE) {
+                    gchar *quoted = exp_quote(ret);
+                    g_string_append(buf, quoted);
+
+                    g_free(quoted);
+                    s = vend+2;
+                }
 
                 g_free(ret);
                 ret = NULL;
                 break;
+
 
             default:
                 g_string_append_c(buf, *s);

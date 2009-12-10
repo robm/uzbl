@@ -330,9 +330,17 @@ in the status bar format), you can use @[ ]@ substitution:
     # prints: This text is XML escaped: &lt;&amp;&gt;
 
 
-NOTE: If you need to use literal @ or \ characters you will need to escape them:
+If you need to use literal @ or \ characters you will need to escape them. 
+
+Two options are available for this. 
+Either escape each character, like:
 
     print At sign: \@  and backslash: \\
+
+Or use the @' '@ expansion:
+
+    print @'A string with @ \ @@@ in it'@
+
 
 
 ### TITLE AND STATUS BAR EVALUATION
