@@ -47,6 +47,7 @@ typedef struct {
     gchar*         geometry;
     GtkPlug*       plug;
     GtkWidget*     scrolled_win;
+    GtkWidget*     vpane;
     GtkWidget*     vbox;
     GtkWidget*     mainbar;
     GtkWidget*     mainbar_label;
@@ -66,6 +67,30 @@ typedef struct {
     GPtrArray    *menu_items;
 } GUI;
 
+/* child window */
+typedef struct {
+    /* GUI */
+    GtkWidget*     win;
+    WebKitWebView* view;
+    GtkWidget*     paned;
+
+    /* settings */
+    gboolean       show;
+    gint           size;
+    gchar*         orientation;
+    gchar*         position;
+    gchar*         uri;
+    gchar*         js;
+    gchar*         inject;
+
+    /* JS object */
+    gboolean            js_initialized;
+    JSClassDefinition   classdef;
+    JSClassRef          classref;
+    JSStringRef         var_name;
+    JSObjectRef         globalobject;
+
+} Child;
 
 /* external communication*/
 enum { FIFO, SOCKET};
@@ -189,6 +214,7 @@ typedef struct {
 /* main uzbl data structure */
 typedef struct {
     GUI           gui;
+    Child         child;
     State         state;
     Network       net;
     Behaviour     behave;
@@ -253,7 +279,7 @@ gboolean
 set_var_value(const gchar *name, gchar *val);
 
 void
-load_uri_imp(gchar *uri);
+load_uri_imp(gchar *uri, WebKitWebView *w);
 
 void
 print(WebKitWebView *page, GArray *argv, GString *result);
@@ -383,6 +409,9 @@ void
 dehilight (WebKitWebView *page, GArray *argv, GString *result);
 
 void
+run_js_child(WebKitWebView * web_view, GArray *argv, GString *result);
+
+void
 run_js (WebKitWebView * web_view, GArray *argv, GString *result);
 
 void
@@ -477,6 +506,12 @@ include(WebKitWebView *page, GArray *argv, GString *result);
 
 void
 builtins();
+
+void
+pack_child();
+
+void
+orient_child();
 
 typedef void (*Command)(WebKitWebView*, GArray *argv, GString *result);
 

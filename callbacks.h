@@ -7,7 +7,13 @@ void
 cmd_load_uri();
 
 void
+cmd_load_uri_child();
+
+void
 cmd_set_status();
+
+void
+cmd_set_child();
 
 void
 set_proxy_url();
@@ -102,6 +108,9 @@ cmd_enforce_96dpi();
 
 void
 cmd_inject_html();
+
+void
+cmd_inject_child();
 
 void
 cmd_caret_browsing();

@@ -72,8 +72,30 @@ cmd_set_status() {
 }
 
 void
+cmd_set_child() {
+    Child *c = &uzbl.child;
+
+    gint max=0; 
+    g_object_get(c->paned, "max-position", &max, NULL);
+
+    if (!c->show) {
+        c->size  = gtk_paned_get_position(GTK_PANED(c->paned));
+        gtk_paned_set_position(GTK_PANED(c->paned), -1);
+        gtk_widget_show(c->paned);
+    } else {
+        gtk_paned_set_position(GTK_PANED(c->paned), c->size?c->size:max-100);
+        gtk_widget_show(c->paned);
+    }
+}
+
+void
 cmd_load_uri() {
-	load_uri_imp (uzbl.state.uri);
+	load_uri_imp (uzbl.state.uri, uzbl.gui.web_view);
+}
+
+void
+cmd_load_uri_child() {
+	load_uri_imp (uzbl.child.uri, uzbl.child.view);
 }
 
 void
@@ -256,6 +278,14 @@ cmd_inject_html() {
     if(uzbl.behave.inject_html) {
         webkit_web_view_load_html_string (uzbl.gui.web_view,
                 uzbl.behave.inject_html, NULL);
+    }
+}
+
+void
+cmd_inject_child() {
+    if(uzbl.child.inject) {
+        webkit_web_view_load_html_string (uzbl.child.view,
+                uzbl.child.inject, NULL);
     }
 }
 

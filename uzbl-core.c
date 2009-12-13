@@ -109,8 +109,16 @@ const struct var_name_to_ptr_t {
     { "max_conns",              PTR_V_INT(uzbl.net.max_conns,                   1,   cmd_max_conns)},
     { "max_conns_host",         PTR_V_INT(uzbl.net.max_conns_host,              1,   cmd_max_conns_host)},
     { "useragent",              PTR_V_STR(uzbl.net.useragent,                   1,   cmd_useragent)},
-    /* requires webkit >=1.1.14 */
     { "view_source",            PTR_V_INT(uzbl.behave.view_source,              0,   cmd_view_source)},
+
+    /* child window */
+    { "child_uri",              PTR_V_STR(uzbl.child.uri,                       1,   cmd_load_uri_child)},
+    { "inject_child",           PTR_V_STR(uzbl.child.inject,                    0,   cmd_inject_child)},
+    { "show_child",             PTR_V_INT(uzbl.child.show,                      1,   cmd_set_child)},
+    { "child_position",         PTR_V_INT(uzbl.child.position,                  1,   pack_child)},
+    // currently broken
+    //{ "child_orientation",      PTR_V_INT(uzbl.child.orientation,               1,   orient_child)},
+
 
     /* exported WebKitWebSettings properties */
     { "zoom_level",             PTR_V_FLOAT(uzbl.behave.zoom_level,             1,   cmd_zoom_level)},
@@ -691,6 +699,7 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "toggle_zoom_type",               {toggle_zoom_type, 0},          },
     { "uri",                            {load_uri, TRUE}                },
     { "js",                             {run_js, TRUE}                  },
+    { "js_child",                       {run_js_child, TRUE}            },
     { "script",                         {run_external_js, 0}            },
     { "toggle_status",                  {toggle_status_cb, 0}           },
     { "spawn",                          {spawn, 0}                      },
@@ -1081,8 +1090,8 @@ act_dump_config_as_events() {
 
 void
 load_uri (WebKitWebView *web_view, GArray *argv, GString *result) {
-    (void) web_view; (void) result;
-    load_uri_imp (argv_idx (argv, 0));
+    (void) result;
+    load_uri_imp (argv_idx (argv, 0), web_view);
 }
 
 /* Javascript*/
@@ -1118,6 +1127,92 @@ js_run_command (JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
 JSStaticFunction js_static_functions[] = {
     {"run", js_run_command, kJSPropertyAttributeNone},
 };
+
+void
+js_child_init() {
+    Child *c = &uzbl.child;
+
+    if(!c->js_initialized) {
+        c->classdef = kJSClassDefinitionEmpty;
+        c->classdef.staticFunctions = js_static_functions;
+        c->classref = JSClassCreate(&c->classdef);
+
+        c->js_initialized = 1;
+    }
+}
+
+void
+js_child_obj() {
+    Child *c = &uzbl.child;
+    WebKitWebFrame *frame;
+    JSGlobalContextRef context;
+
+    frame = webkit_web_view_get_main_frame(WEBKIT_WEB_VIEW(uzbl.child.view));
+    context = webkit_web_frame_get_global_context(frame);
+    c->globalobject = JSContextGetGlobalObject(context);
+
+    /* uzbl javascript namespace */
+    c->var_name = JSStringCreateWithUTF8CString("UzblChild");
+    JSObjectSetProperty(context, c->globalobject, c->var_name,
+                        JSObjectMake(context, c->classref, NULL),
+                        kJSClassAttributeNone, NULL);
+}
+
+void
+js_child_obj_rm() {
+    Child *c = &uzbl.child;
+    WebKitWebFrame *frame;
+    JSGlobalContextRef context;
+
+    frame = webkit_web_view_get_main_frame(WEBKIT_WEB_VIEW(uzbl.child.view));
+    context = webkit_web_frame_get_global_context(frame);
+    JSObjectDeleteProperty(context, c->globalobject, c->var_name, NULL);
+    JSStringRelease(c->var_name);
+
+    c->var_name     = NULL;
+    c->globalobject = NULL;
+}
+
+void
+js_child_eval(WebKitWebView * web_view, gchar *script, GString *result) {
+    (void) web_view;
+    Child *c = &uzbl.child;
+    gboolean clear_obj = FALSE;
+    WebKitWebFrame *frame;
+    JSGlobalContextRef context;
+
+    JSStringRef js_script;
+    JSValueRef js_result;
+    JSStringRef js_result_string;
+    size_t js_result_size;
+
+    if(!c->globalobject) {
+        js_child_obj();
+        clear_obj = TRUE;
+    }
+    frame = webkit_web_view_get_main_frame(WEBKIT_WEB_VIEW(uzbl.child.view));
+    context = webkit_web_frame_get_global_context(frame);
+
+    /* evaluate the script and get return value*/
+    js_script = JSStringCreateWithUTF8CString(script);
+    js_result = JSEvaluateScript(context, js_script, c->globalobject, NULL, 0, NULL);
+    if (js_result && !JSValueIsUndefined(context, js_result)) {
+        js_result_string = JSValueToStringCopy(context, js_result, NULL);
+        js_result_size = JSStringGetMaximumUTF8CStringSize(js_result_string);
+
+        if (js_result_size) {
+            char js_result_utf8[js_result_size];
+            JSStringGetUTF8CString(js_result_string, js_result_utf8, js_result_size);
+            g_string_assign(result, js_result_utf8);
+        }
+
+        JSStringRelease(js_result_string);
+    }
+    JSStringRelease(js_script);
+
+    if(clear_obj)
+        js_child_obj_rm();
+}
 
 void
 js_init() {
@@ -1177,6 +1272,12 @@ eval_js(WebKitWebView * web_view, gchar *script, GString *result) {
 
     JSStringRelease(var_name);
     JSStringRelease(js_script);
+}
+
+void
+run_js_child(WebKitWebView * web_view, GArray *argv, GString *result) {
+    if (argv_idx(argv, 0))
+        js_child_eval(web_view, argv_idx(argv, 0), result);
 }
 
 void
@@ -2127,6 +2228,39 @@ create_browser () {
       NULL);
 }
 
+void
+child_commit_cb (WebKitWebView* page, WebKitWebFrame* frame, gpointer data) {
+    (void) page;
+    (void) frame;
+    (void) data;
+
+    if(uzbl.child.globalobject)
+        js_child_obj_rm();
+    js_child_init();
+
+    GString* newuri = g_string_new (webkit_web_frame_get_uri (frame));
+    if(!strncmp(newuri->str, "file://", 7))
+        js_child_obj();
+
+    g_string_free(newuri, TRUE);
+}
+
+void
+create_child () {
+    Child *c = &uzbl.child;
+
+    c->view = WEBKIT_WEB_VIEW (webkit_web_view_new ());
+
+    g_object_connect((GObject*)c->view,
+      "signal::key-press-event",                      (GCallback)key_press_cb,            NULL,
+      "signal::key-release-event",                    (GCallback)key_release_cb,          NULL,
+      "signal::button-press-event",                   (GCallback)button_press_cb,         NULL,
+      "signal::button-release-event",                 (GCallback)button_release_cb,       NULL,
+      "signal::hovering-over-link",                   (GCallback)link_hover_cb,           NULL,
+      "signal::load-committed",                       (GCallback)child_commit_cb,          NULL,
+      NULL);
+}
+
 GtkWidget*
 create_mainbar () {
     GUI *g = &uzbl.gui;
@@ -2547,13 +2681,15 @@ initialize(int argc, char *argv[]) {
 
     create_mainbar();
     create_browser();
+    create_child();
 }
 
 void
-load_uri_imp(gchar *uri) {
+load_uri_imp(gchar *uri, WebKitWebView *w) {
     GString* newuri;
     if (g_strstr_len (uri, 11, "javascript:") != NULL) {
-        eval_js(uzbl.gui.web_view, uri, NULL);
+        //eval_js(uzbl.gui.web_view, uri, NULL);
+        eval_js(w, uri, NULL);
         return;
     }
     newuri = g_string_new (uri);
@@ -2577,10 +2713,54 @@ load_uri_imp(gchar *uri) {
         g_string_free (fullpath, TRUE);
     }
     /* if we do handle cookies, ask our handler for them */
-    webkit_web_view_load_uri (uzbl.gui.web_view, newuri->str);
+    webkit_web_view_load_uri (w, newuri->str);
     g_string_free (newuri, TRUE);
 }
 
+void
+pack_child() {
+    Child *c = &uzbl.child;
+
+    g_object_ref(c->win);
+    g_object_ref(uzbl.gui.scrolled_win);
+    gtk_container_remove(GTK_CONTAINER(c->paned), GTK_WIDGET(c->win));
+    gtk_container_remove(GTK_CONTAINER(c->paned), GTK_WIDGET(uzbl.gui.scrolled_win));
+
+    if(c->position) {
+        gtk_paned_pack1 (GTK_PANED(c->paned), uzbl.gui.scrolled_win, 1, 0);
+        gtk_paned_pack2 (GTK_PANED(c->paned), c->win, 1, 1);
+    }
+    else {
+        gtk_paned_pack2 (GTK_PANED(c->paned), uzbl.gui.scrolled_win, 1, 0);
+        gtk_paned_pack1 (GTK_PANED(c->paned), c->win, 1, 1);
+    }
+    gtk_widget_show(c->paned);
+}
+
+// TODO: fix this functionality
+void
+orient_child() {
+    Child *c = &uzbl.child;
+
+    g_object_ref(uzbl.gui.vbox);
+    g_object_ref(c->win);
+    g_object_ref(uzbl.gui.scrolled_win);
+
+    if(c->paned) {
+        gtk_container_remove(GTK_CONTAINER(uzbl.gui.vbox), GTK_WIDGET(c->paned));
+    }
+
+    if(!c->orientation)
+        c->paned = gtk_vpaned_new();
+    else
+        c->paned = gtk_hpaned_new();
+
+    gtk_container_add (GTK_CONTAINER (uzbl.gui.vbox), c->paned);
+    pack_child();
+
+    gtk_box_pack_start (GTK_BOX (uzbl.gui.vbox), c->paned, TRUE, TRUE, 0);
+    gtk_widget_show(uzbl.gui.vbox);
+}
 
 #ifndef UZBL_LIBRARY
 /** -- MAIN -- **/
@@ -2591,14 +2771,20 @@ main (int argc, char* argv[]) {
     uzbl.gui.scrolled_win = gtk_scrolled_window_new (NULL, NULL);
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (uzbl.gui.scrolled_win),
         GTK_POLICY_NEVER, GTK_POLICY_NEVER);
-
     gtk_container_add (GTK_CONTAINER (uzbl.gui.scrolled_win),
         GTK_WIDGET (uzbl.gui.web_view));
 
+    uzbl.child.win = gtk_scrolled_window_new (NULL, NULL);
+    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (uzbl.child.win),
+        GTK_POLICY_NEVER, GTK_POLICY_NEVER);
+    gtk_container_add (GTK_CONTAINER (uzbl.child.win),
+        GTK_WIDGET (uzbl.child.view));
+
     uzbl.gui.vbox = gtk_vbox_new (FALSE, 0);
+    orient_child();
 
     /* initial packing */
-    gtk_box_pack_start (GTK_BOX (uzbl.gui.vbox), uzbl.gui.scrolled_win, TRUE, TRUE, 0);
+    //gtk_box_pack_start (GTK_BOX (uzbl.gui.vbox), uzbl.child.paned, TRUE, TRUE, 0);
     gtk_box_pack_start (GTK_BOX (uzbl.gui.vbox), uzbl.gui.mainbar, FALSE, TRUE, 0);
 
     if (uzbl.state.plug_mode) {
@@ -2625,6 +2811,7 @@ main (int argc, char* argv[]) {
     uzbl.gui.scbar_h = (GtkScrollbar*) gtk_hscrollbar_new (NULL);
     uzbl.gui.bar_h = gtk_range_get_adjustment((GtkRange*) uzbl.gui.scbar_h);
     gtk_widget_set_scroll_adjustments ((GtkWidget*) uzbl.gui.web_view, uzbl.gui.bar_h, uzbl.gui.bar_v);
+    //gtk_widget_set_scroll_adjustments ((GtkWidget*) uzbl.gui.slave_view, uzbl.gui.bar_h, uzbl.gui.bar_v);
 
     if(!uzbl.state.instance_name)
         uzbl.state.instance_name = itos((int)uzbl.xwin);
