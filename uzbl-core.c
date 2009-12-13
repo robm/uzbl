@@ -701,6 +701,7 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "js",                             {run_js, TRUE}                  },
     { "js_child",                       {run_js_child, TRUE}            },
     { "script",                         {run_external_js, 0}            },
+    { "script_child",                   {run_external_js_child, 0}      },
     { "toggle_status",                  {toggle_status_cb, 0}           },
     { "spawn",                          {spawn, 0}                      },
     { "sync_spawn",                     {spawn_sync, 0}                 }, // needed for cookie handler
@@ -1288,7 +1289,7 @@ run_js (WebKitWebView * web_view, GArray *argv, GString *result) {
 
 void
 run_external_js (WebKitWebView * web_view, GArray *argv, GString *result) {
-    (void) result;
+    //(void) result;
     gchar *path = NULL;
 
     if (argv_idx(argv, 0) &&
@@ -1316,11 +1317,21 @@ run_external_js (WebKitWebView * web_view, GArray *argv, GString *result) {
         g_free (js);
         js = newjs;
 
-        eval_js (web_view, js, result);
+        if(web_view == uzbl.child.view)
+            printf("Child script\n");
+
+        web_view == uzbl.child.view ? js_child_eval(web_view, js, result) : eval_js (web_view, js, result);
         g_free (js);
         g_array_free (lines, TRUE);
         g_free(path);
     }
+}
+
+void
+run_external_js_child (WebKitWebView * web_view, GArray *argv, GString *result) {
+    (void) web_view;
+
+    run_external_js(uzbl.child.view, argv, result);
 }
 
 void
@@ -2239,9 +2250,10 @@ child_commit_cb (WebKitWebView* page, WebKitWebFrame* frame, gpointer data) {
     js_child_init();
 
     GString* newuri = g_string_new (webkit_web_frame_get_uri (frame));
-    if(!strncmp(newuri->str, "file://", 7))
+    //if(!strncmp(newuri->str, "file://", 7))
         js_child_obj();
 
+    send_event(0, newuri->str, "CHILD_LOAD_COMMIT"); 
     g_string_free(newuri, TRUE);
 }
 

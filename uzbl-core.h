@@ -418,6 +418,9 @@ void
 run_external_js (WebKitWebView * web_view, GArray *argv, GString *result);
 
 void
+run_external_js_child (WebKitWebView * web_view, GArray *argv, GString *result);
+
+void
 eval_js(WebKitWebView * web_view, gchar *script, GString *result);
 
 void handle_cookies (SoupSession *session,
