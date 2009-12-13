@@ -112,10 +112,10 @@ const struct var_name_to_ptr_t {
     { "view_source",            PTR_V_INT(uzbl.behave.view_source,              0,   cmd_view_source)},
 
     /* child window */
-    { "child_uri",              PTR_V_STR(uzbl.child.uri,                       1,   cmd_load_uri_child)},
-    { "inject_child",           PTR_V_STR(uzbl.child.inject,                    0,   cmd_inject_child)},
-    { "show_child",             PTR_V_INT(uzbl.child.show,                      1,   cmd_set_child)},
-    { "child_position",         PTR_V_INT(uzbl.child.position,                  1,   pack_child)},
+    { "child.uri",              PTR_V_STR(uzbl.child.uri,                       1,   cmd_load_uri_child)},
+    { "child.inject",           PTR_V_STR(uzbl.child.inject,                    0,   cmd_inject_child)},
+    { "child.show",             PTR_V_INT(uzbl.child.show,                      1,   cmd_set_child)},
+    { "child.position",         PTR_V_INT(uzbl.child.position,                  1,   pack_child)},
     // currently broken
     //{ "child_orientation",      PTR_V_INT(uzbl.child.orientation,               1,   orient_child)},
 
@@ -699,9 +699,9 @@ struct {const char *key; CommandInfo value;} cmdlist[] =
     { "toggle_zoom_type",               {toggle_zoom_type, 0},          },
     { "uri",                            {load_uri, TRUE}                },
     { "js",                             {run_js, TRUE}                  },
-    { "js_child",                       {run_js_child, TRUE}            },
+    { "child.js",                       {run_js_child, TRUE}            },
     { "script",                         {run_external_js, 0}            },
-    { "script_child",                   {run_external_js_child, 0}      },
+    { "child.script",                   {run_external_js_child, 0}      },
     { "toggle_status",                  {toggle_status_cb, 0}           },
     { "spawn",                          {spawn, 0}                      },
     { "sync_spawn",                     {spawn_sync, 0}                 }, // needed for cookie handler
@@ -2258,6 +2258,17 @@ child_commit_cb (WebKitWebView* page, WebKitWebFrame* frame, gpointer data) {
 }
 
 void
+child_finish_cb (WebKitWebView* page, WebKitWebFrame* frame, gpointer data) {
+    (void) page;
+    (void) frame;
+    (void) data;
+
+    GString* newuri = g_string_new (webkit_web_frame_get_uri (frame));
+    send_event(0, newuri->str, "CHILD_LOAD_FINISH"); 
+    g_string_free(newuri, TRUE);
+}
+
+void
 create_child () {
     Child *c = &uzbl.child;
 
@@ -2270,6 +2281,7 @@ create_child () {
       "signal::button-release-event",                 (GCallback)button_release_cb,       NULL,
       "signal::hovering-over-link",                   (GCallback)link_hover_cb,           NULL,
       "signal::load-committed",                       (GCallback)child_commit_cb,          NULL,
+      "signal::load-finished",                        (GCallback)child_finish_cb,          NULL,
       NULL);
 }
 
