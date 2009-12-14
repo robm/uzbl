@@ -116,8 +116,7 @@ const struct var_name_to_ptr_t {
     { "child.inject",           PTR_V_STR(uzbl.child.inject,                    0,   cmd_inject_child)},
     { "child.show",             PTR_V_INT(uzbl.child.show,                      1,   cmd_set_child)},
     { "child.position",         PTR_V_INT(uzbl.child.position,                  1,   pack_child)},
-    // currently broken
-    //{ "child_orientation",      PTR_V_INT(uzbl.child.orientation,               1,   orient_child)},
+    { "child.orientation",      PTR_V_INT(uzbl.child.orientation,               1,   set_orientation)},
 
 
     /* exported WebKitWebSettings properties */
@@ -2761,18 +2760,17 @@ pack_child() {
     gtk_widget_show(c->paned);
 }
 
-// TODO: fix this functionality
+void
+set_orientation() {
+    Child *c = &uzbl.child;
+
+    gtk_orientable_set_orientation(GTK_ORIENTABLE(c->paned),
+            c->orientation?GTK_ORIENTATION_HORIZONTAL:GTK_ORIENTATION_VERTICAL);
+}
+
 void
 orient_child() {
     Child *c = &uzbl.child;
-
-    g_object_ref(uzbl.gui.vbox);
-    g_object_ref(c->win);
-    g_object_ref(uzbl.gui.scrolled_win);
-
-    if(c->paned) {
-        gtk_container_remove(GTK_CONTAINER(uzbl.gui.vbox), GTK_WIDGET(c->paned));
-    }
 
     if(!c->orientation)
         c->paned = gtk_vpaned_new();
@@ -2781,10 +2779,13 @@ orient_child() {
 
     gtk_container_add (GTK_CONTAINER (uzbl.gui.vbox), c->paned);
     pack_child();
+    set_orientation();
 
     gtk_box_pack_start (GTK_BOX (uzbl.gui.vbox), c->paned, TRUE, TRUE, 0);
     gtk_widget_show(uzbl.gui.vbox);
 }
+
+
 
 #ifndef UZBL_LIBRARY
 /** -- MAIN -- **/

@@ -516,6 +516,9 @@ pack_child();
 void
 orient_child();
 
+void
+set_orientation();
+
 typedef void (*Command)(WebKitWebView*, GArray *argv, GString *result);
 
 typedef struct {

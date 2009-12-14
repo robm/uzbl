@@ -75,15 +75,17 @@ void
 cmd_set_child() {
     Child *c = &uzbl.child;
 
-    gint max=0; 
+    gint min, max=0; 
     g_object_get(c->paned, "max-position", &max, NULL);
+    g_object_get(c->paned, "min-position", &min, NULL);
 
     if (!c->show) {
         c->size  = gtk_paned_get_position(GTK_PANED(c->paned));
         gtk_paned_set_position(GTK_PANED(c->paned), -1);
         gtk_widget_show(c->paned);
     } else {
-        gtk_paned_set_position(GTK_PANED(c->paned), c->size?c->size:max-100);
+        gtk_paned_set_position(GTK_PANED(c->paned), c->size?c->size:min);
+        //gtk_paned_set_position(GTK_PANED(c->paned), c->size?c->size:max-100);
         gtk_widget_show(c->paned);
     }
 }
