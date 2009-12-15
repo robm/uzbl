@@ -252,6 +252,26 @@ set formfiller = spawn @scripts_dir/formfiller
 @bind <Ctrl>du = event APPEND_KEYCMD \@uri
 @bind <Ctrl>dt = event APPEND_KEYCMD \@TITLE
 
+# Example child window bindings
+
+# Open uri in child window
+@bind <Alt>o<child.uri:>_ = set child.uri = %s
+
+# Open <Alt><Button2> clicked links from child win in main window
+@bind <Alt><Button2> = uri \@SELECTED_URI
+
+# Google search in child win and resize child win to a static height
+# Use the above binding to open the search results in the main window
+#
+@bind <Alt>g<child.google:>_ = chain 'set child.uri = google.com/search?q=%s' 'set child.size = 300'
+
+# Toggle visibility (0 = hide, 1 = show)
+@bind <Alt>t = @jsh if(get('child.show')==1){set('child.show', 0)}else{set('child.show', 1)}
+# Toggle orientation (0 = horizontal, 1 = vertical)
+@bind <Alt>co = @jsh if(get('child.orientation')==1){set('child.orientation', 0)}else{set('child.orientation', 1)}
+# Toggle position ( 0 = top/left, 1 = bottom/right)
+@bind <Alt>cp = @jsh if(get('child.position')==1){set('child.position', 0)}else{set('child.position', 1)}
+
 
 # === command editing configuration ==========================================
 
