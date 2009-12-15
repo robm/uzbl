@@ -117,6 +117,7 @@ const struct var_name_to_ptr_t {
     { "child.show",             PTR_V_INT(uzbl.child.show,                      1,   cmd_set_child)},
     { "child.position",         PTR_V_INT(uzbl.child.position,                  1,   pack_child)},
     { "child.orientation",      PTR_V_INT(uzbl.child.orientation,               1,   set_orientation)},
+    { "child.size",             PTR_V_INT(uzbl.child.size,                      1,   cmd_child_size)},
 
 
     /* exported WebKitWebSettings properties */
@@ -226,7 +227,8 @@ gchar *
 expand(const char *s, guint recurse) {
     uzbl_cmdprop *c;
     enum exp_type etype;
-    char *end_simple_var = "^°!\"§$%&/()=?'`'+~*'#-.:,;@<>| \\{}[]¹²³¼½";
+    //char *end_simple_var = "^°!\"§$%&/()=?'`'+~*'#-.:,;@<>| \\{}[]¹²³¼½";
+    char *end_simple_var = "^°!\"§$%&/()=?'`'+~*'#-:,;@<>| \\{}[]¹²³¼½";
     char *ret = NULL;
     char *vend = NULL;
     GError *err = NULL;
@@ -1803,7 +1805,8 @@ set_var_value(const gchar *name, gchar *val) {
     uzbl_cmdprop *c = NULL;
     char *endp = NULL;
     char *buf = NULL;
-    char *invalid_chars = "^°!\"§$%&/()=?'`'+~*'#-.:,;@<>| \\{}[]¹²³¼½";
+    //char *invalid_chars = "^°!\"§$%&/()=?'`'+~*'#-.:,;@<>| \\{}[]¹²³¼½";
+    char *invalid_chars = "^°!\"§$%&/()=?'`'+~*'#-:,;@<>| \\{}[]¹²³¼½";
     GString *msg;
 
     if( (c = g_hash_table_lookup(uzbl.comm.proto_var, name)) ) {
@@ -2782,6 +2785,7 @@ orient_child() {
     set_orientation();
 
     gtk_box_pack_start (GTK_BOX (uzbl.gui.vbox), c->paned, TRUE, TRUE, 0);
+    cmd_set_child();
     gtk_widget_show(uzbl.gui.vbox);
 }
 

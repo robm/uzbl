@@ -87,6 +87,22 @@ cmd_set_child() {
 }
 
 void
+cmd_child_size() {
+    Child *c = &uzbl.child;
+
+    gint min, max, newpos; 
+    g_object_get(c->paned, "max-position", &max, NULL);
+    g_object_get(c->paned, "min-position", &min, NULL);
+
+    newpos = c->position?max-c->size:min+c->size;
+    gtk_paned_set_position(GTK_PANED(c->paned), newpos);
+
+    if(newpos > 0)
+        c->show=1;
+    c->size = newpos;
+}
+
+void
 cmd_load_uri() {
 	load_uri_imp (uzbl.state.uri, uzbl.gui.web_view);
 }

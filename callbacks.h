@@ -16,6 +16,9 @@ void
 cmd_set_child();
 
 void
+cmd_child_size();
+
+void
 set_proxy_url();
 
 void
