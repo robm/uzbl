@@ -2761,6 +2761,7 @@ pack_child() {
         gtk_paned_pack1 (GTK_PANED(c->paned), c->win, 1, 1);
     }
     gtk_widget_show(c->paned);
+    gtk_widget_grab_focus (GTK_WIDGET (uzbl.gui.web_view));
 }
 
 void
@@ -2769,6 +2770,7 @@ set_orientation() {
 
     gtk_orientable_set_orientation(GTK_ORIENTABLE(c->paned),
             c->orientation?GTK_ORIENTATION_HORIZONTAL:GTK_ORIENTATION_VERTICAL);
+    gtk_widget_grab_focus (GTK_WIDGET (uzbl.gui.web_view));
 }
 
 void
@@ -2787,6 +2789,7 @@ orient_child() {
     gtk_box_pack_start (GTK_BOX (uzbl.gui.vbox), c->paned, TRUE, TRUE, 0);
     cmd_set_child();
     gtk_widget_show(uzbl.gui.vbox);
+    gtk_widget_grab_focus (GTK_WIDGET (uzbl.gui.web_view));
 }
 
 

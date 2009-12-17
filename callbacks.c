@@ -84,6 +84,8 @@ cmd_set_child() {
         gtk_paned_set_position(GTK_PANED(c->paned), c->position?max:min);
     } else 
         gtk_paned_set_position(GTK_PANED(c->paned), c->size?c->size:(c->position?min:max));
+
+    gtk_widget_grab_focus (GTK_WIDGET (uzbl.gui.web_view));
 }
 
 void
@@ -100,6 +102,8 @@ cmd_child_size() {
     if(newpos > 0)
         c->show=1;
     c->size = newpos;
+
+    gtk_widget_grab_focus (GTK_WIDGET (uzbl.gui.web_view));
 }
 
 void
