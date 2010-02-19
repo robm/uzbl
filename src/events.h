@@ -7,7 +7,8 @@
 enum event_type {
     LOAD_START, LOAD_COMMIT, LOAD_FINISH, LOAD_ERROR,
     REQUEST_STARTING,
-    KEY_PRESS, KEY_RELEASE, DOWNLOAD_REQ, COMMAND_EXECUTED,
+    KEY_PRESS, KEY_RELEASE, MOD_PRESS, MOD_RELEASE,
+    DOWNLOAD_REQ, COMMAND_EXECUTED,
     LINK_HOVER, TITLE_CHANGED, GEOMETRY_CHANGED,
     WEBINSPECTOR, NEW_WINDOW, SELECTION_CHANGED,
     VARIABLE_SET, FIFO_SET, SOCKET_SET,
@@ -34,4 +35,4 @@ void
 send_event(int type, const gchar *details, const gchar *custom_event);
 
 void
-key_to_event(guint keyval, guint state, int mode);
+key_to_event(guint keyval, guint state, guint is_modifier, int mode);
