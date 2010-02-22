@@ -36,3 +36,6 @@ send_event(int type, const gchar *details, const gchar *custom_event);
 
 void
 key_to_event(guint keyval, guint state, guint is_modifier, int mode);
+
+gchar *
+get_modifier_mask(guint state);
