@@ -2,14 +2,16 @@
 #
 # Block downloading of user defined http requests
 #
-# This is script is intended たo be use together 
+# This is script is intended to be used together 
 # with the 'request_handler' uzbl-core handler
+#
+# $8 contains the URI of the current ressource
 #
 # Writing BLOCK to stdout will block loading the 
 # specific ressource
 
 
-# Block every ressource  containing .png
+# Block every ressource containing .png
 #
 if echo "$8" | grep '.png'; then
     echo BLOCK
