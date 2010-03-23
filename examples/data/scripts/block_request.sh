@@ -2,7 +2,7 @@
 #
 # Block downloading of user defined http requests
 #
-# This is script is intended to be used together 
+# This script is intended to be used together 
 # with the 'request_handler' uzbl-core handler
 #
 # $8 contains the URI of the current ressource
