@@ -124,6 +124,7 @@ typedef struct {
     gchar*   socket_dir;
     gchar*   cookie_handler;
     gchar*   authentication_handler;
+    gchar*   request_handler;
     gchar*   default_font_family;
     gchar*   monospace_font_family;
     gchar*   sans_serif_font_family;

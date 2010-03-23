@@ -860,3 +860,40 @@ save_cookies_http(SoupMessage *msg, gpointer user_data) {
 
     g_slist_free(ck);
 }
+
+void
+cb_request_queued(SoupSession *session, SoupMessage *msg) {
+    (void)  session;
+    SoupURI *soup_uri;
+    gchar   *str_uri;
+
+    if(msg->method && !strncmp(msg->method, "POST", 4))
+        return;
+
+    soup_uri = soup_message_get_uri(msg);
+    str_uri  = soup_uri_to_string(soup_uri, FALSE);
+
+    if (uzbl.behave.request_handler) {
+        run_handler(uzbl.behave.request_handler, str_uri);
+
+        if(uzbl.comm.sync_stdout && strcmp (uzbl.comm.sync_stdout, "") != 0) {
+            if (strncmp(uzbl.comm.sync_stdout, "BLOCK", strlen("BLOCK"))) {
+                soup_uri = soup_uri_new("http://.invalid");
+                soup_message_set_uri(msg, soup_uri);
+
+                soup_uri_free(soup_uri); soup_uri = NULL;
+                g_free(str_uri); str_uri = NULL;
+            }
+        }
+
+        if (uzbl.comm.sync_stdout)
+            uzbl.comm.sync_stdout = strfree(uzbl.comm.sync_stdout);
+
+        return;
+    }
+
+    if(str_uri)
+        g_free(str_uri);
+    if(soup_uri)
+        soup_uri_free(soup_uri);
+}
