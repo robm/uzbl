@@ -101,6 +101,7 @@ const struct var_name_to_ptr_t {
     { "cookie_handler",         PTR_V_STR(uzbl.behave.cookie_handler,           1,   NULL)},
     { "authentication_handler", PTR_V_STR(uzbl.behave.authentication_handler,   1,   set_authentication_handler)},
     { "scheme_handler",         PTR_V_STR(uzbl.behave.scheme_handler,           1,   NULL)},
+    { "request_handler",        PTR_V_STR(uzbl.behave.request_handler,          1,   NULL)},
     { "fifo_dir",               PTR_V_STR(uzbl.behave.fifo_dir,                 1,   cmd_fifo_dir)},
     { "socket_dir",             PTR_V_STR(uzbl.behave.socket_dir,               1,   cmd_socket_dir)},
     { "http_debug",             PTR_V_INT(uzbl.behave.http_debug,               1,   cmd_http_debug)},
@@ -2522,6 +2523,9 @@ initialize(int argc, char *argv[]) {
     uzbl.net.soup_cookie_jar = soup_cookie_jar_new();
     soup_session_add_feature(uzbl.net.soup_session, SOUP_SESSION_FEATURE(uzbl.net.soup_cookie_jar));
     g_object_connect(G_OBJECT(uzbl.net.soup_cookie_jar), "signal::changed", G_CALLBACK(save_cookies_js), NULL, NULL);
+
+    /* queue requests */
+    g_signal_connect(uzbl.net.soup_session, "request-queued", G_CALLBACK(cb_request_queued), NULL);
 
     for(i=0; sigs[i]; i++) {
         if(setup_signal(sigs[i], catch_signal) == SIG_ERR)
