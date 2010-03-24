@@ -628,6 +628,7 @@ navigation_decision_cb (WebKitWebView *web_view, WebKitWebFrame *frame, WebKitNe
 
         g_string_free(s, TRUE);
     }
+
     if (!decision_made)
         webkit_web_policy_decision_use(policy_decision);
 
@@ -864,8 +865,8 @@ save_cookies_http(SoupMessage *msg, gpointer user_data) {
 void
 cb_request_queued(SoupSession *session, SoupMessage *msg) {
     (void)  session;
-    SoupURI *soup_uri;
-    gchar   *str_uri;
+    SoupURI *soup_uri = NULL;
+    gchar   *str_uri  = NULL;
 
     if(msg->method && !strncmp(msg->method, "POST", 4))
         return;

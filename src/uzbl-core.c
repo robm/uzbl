@@ -2507,6 +2507,12 @@ initialize(int argc, char *argv[]) {
     uzbl.state.selected_url = NULL;
     uzbl.state.searchtx = NULL;
 
+    uzbl.behave.scheme_handler = NULL;
+    uzbl.behave.request_handler = NULL;
+    uzbl.behave.cookie_handler = NULL;
+    uzbl.behave.authentication_handler = NULL;
+
+
     GOptionContext* context = g_option_context_new ("[ uri ] - load a uri by default");
     g_option_context_add_main_entries (context, entries, NULL);
     g_option_context_add_group (context, gtk_get_option_group (TRUE));
@@ -2526,6 +2532,7 @@ initialize(int argc, char *argv[]) {
 
     /* queue requests */
     g_signal_connect(uzbl.net.soup_session, "request-queued", G_CALLBACK(cb_request_queued), NULL);
+
 
     for(i=0; sigs[i]; i++) {
         if(setup_signal(sigs[i], catch_signal) == SIG_ERR)

@@ -7,5 +7,6 @@ const struct {
 { "set title_format_short = \\@TITLE - Uzbl browser <\\@NAME>" },
 { "set max_conns = 100" }, /* WebkitGTK default: 10 */
 { "set max_conns_host = 6" }, /* WebkitGTK default: 2 */
+{ "set request_handler = " },
 { NULL }
 };
